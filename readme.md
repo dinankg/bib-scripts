@@ -56,3 +56,6 @@ Then running `b,bib example.b2` at shell prompt produces the output
 - `bib,b2` does the reverse (converts `.bib` format to concise format)
 
 - `@doi` opens the given doi in a browser
+
+Disclaimer:
+There are probably missing files and inconvenient "hard-wired" shell paths.
