@@ -1,0 +1,197 @@
+#!/bin/perl -w
+#	b1-bib
+#	convert my .b1 file format into .bib file format
+
+#
+#	read in abbreviations
+#
+if (1) {
+	open(TRY, "/n/zip/z/fessler/tex/biblio/abbrev.bib");
+	while (<TRY>) {
+		chop;
+	#	print "`$_'\n";
+		next unless ($_);
+
+		($abbr, $long) = split(/= "/, $_);
+		$abbr =~ s/\@string{//;
+		$abbr =~ s/	//g;
+		$long =~ s/"}//;
+	#	print "abbr=`$abbr' long=`$long'\n";
+		$Abbr{$abbr} = $long;
+	}
+	close(TRY);
+}
+
+#
+#	slurp paragraph at time
+#
+#$* = 1;
+$/ = "";
+
+$Line1spacer = '  ';
+
+%EntryType = (	'@a',	'ARTICLE',
+		'@b',	'BOOK',
+		'@c',	'CONFERENCE',
+		'@d',	'PHDTHESIS',
+		'@i',	'INCOLLECTION',
+		'@m',	'MISC',
+		'@p',	'PROCEEDINGS',
+		'@r',	'TECHREPORT');
+
+foreach $file (@ARGV) {
+	print STDERR "$file\n";
+	open(TRY, $file);
+	while (<TRY>) {
+		chop;
+#		print "`$_'\n";
+
+		if ($_ =~ /^#/) {
+			next;		# skip comment lines
+		}
+
+		@_ = split(/\n/);
+		($type, $code, @line1) = split(/$Line1spacer/, shift(@_));
+		$author = shift(@_);
+		$title = shift(@_);
+		@extra = @_;
+		$type =~ tr/A-Z/a-z/;
+
+		$author =~ s/  / and /g;
+#		$author =~ s/([A-Z]) /$1. /g;	# put . after initials
+
+		# surround words in title with caps with {} 
+#		$title =~ s/ ([A-Z][A-Za-z'-]*[a-zA-Z])/ {$1}/g;
+#		$title =~ s/^([A-Z][A-Z]*[A-Z]) /{$1} /g;
+		$title =~ s/([A-Z][A-Za-z0-9'-]*[A-Za-z0-9])/{$1}/g;
+
+		$type = $EntryType{$type};
+
+		undef	$address;
+		undef	$booktitle;
+#		undef	$edition;
+		undef	$editor;
+		undef	$institute;
+		undef	$journal;
+		undef	$month;
+#		undef	$annote;
+#		undef	$note;
+		undef	$number;
+		undef	$pages;
+		undef	$publisher;
+		undef	$school;
+#		undef	$series;
+		undef	$volume;
+		undef	$year;
+#		undef	$abs;
+
+		#
+		#	Get required stuff from line1
+		#
+		if ($type eq 'ARTICLE') {
+			($journal, $volume, $number, $pages, $month, $year) = @line1;
+			$journal = "{$Abbr{$journal}}"	if (defined($Abbr{$journal}));
+		}
+		elsif ($type eq 'BOOK') {
+			($publisher, $address, $year) = @line1;
+			$address = "{$Abbr{$address}}" if (defined($Abbr{$address}));
+		}
+		elsif ($type eq 'CONFERENCE') {
+			($booktitle, $volume, $pages, $year) = @line1;
+			$booktitle = "{$Abbr{$booktitle}}" if (defined($Abbr{$booktitle}));
+		}
+		elsif ($type eq 'PHDTHESIS') {
+			($school, $address, $month, $year) = @line1;
+			$school = "{$Abbr{$school}}" if (defined($Abbr{$school}));
+		}
+		elsif ($type eq 'INCOLLECTION') {
+			($booktitle, $editor, $publisher, $address, $pages, $year) = @line1;
+			$booktitle = "{$Abbr{$booktitle}}" if (defined($Abbr{$booktitle}));
+		}
+		elsif ($type eq 'MISC') {
+			($year) = @line1;
+		}
+		elsif ($type eq 'PROCEEDINGS') {
+			($publisher, $address, $year) = @line1;
+		}
+		elsif ($type eq 'TECHREPORT') {
+			($number, $institute, $address, $month, $year) = @line1;
+			$institute = "{$Abbr{$institute}}" if (defined($Abbr{$institute}));
+			$address = "{$Abbr{$address}}" if (defined($Abbr{$address}));
+		}
+		else {
+			print "Bad record: @_\n";
+			die "Unknown type $type";
+		}
+
+		#
+		#	Print .bib record
+		#
+		if (1) {
+			print	"\n\@$type\{\n";
+			print	"\t$code,\n";
+			if ($type eq 'PROCEEDINGS') {
+				print	"\teditor =\t\{$author\},\n";
+			} else {
+				print	"\tauthor =\t\{$author\},\n";
+			}
+			print	"\ttitle =\t\t\{$title\},\n";
+			print	"\tjournal =\t$journal,\n"	if ($journal);
+			print	"\tbooktitle =\t$booktitle,\n"	if ($booktitle);
+			print	"\tvolume =\t$volume,\n"	if (defined($volume) && $volume ne '?');
+			print	"\tnumber =\t$number,\n"	if (defined($number) && $number ne '?');
+
+			print	"\teditor =\t$editor,\n"	if (defined($editor) && $editor ne '?');
+			print	"\tinstitution =\t$institute,\n" if (defined($institute) && $institute ne '?');
+			print	"\tpublisher =\t$publisher,\n"	if ($publisher);
+			print	"\tschool =\t$school,\n"	if ($school);
+			print	"\taddress =\t$address,\n"	if (defined($address) && $address ne '?');
+		}
+
+		if (defined($pages) && $pages ne '?' && $pages ne '?-?') {
+			$ptmp = $pages;
+			if ($ptmp =~ /[-A-Z]/) {
+				$pages =~ s/-/--/;
+				print	"\tpages =\t\t\{$pages\},\n";
+			} else {
+				print	"\tpages =\t\t$pages,\n";
+			}
+		}
+
+		print	"\tmonth =\t\t$month,\n"	if (defined($month) && $month ne '?');
+
+		if (@extra) {
+			@_ = @extra;
+			for (@_) {
+				if ($_ =~ /^@/) {
+					($a,$b) = split(/\t/);
+					$a =~ s/^@//;
+					if ($a eq 'abs') {
+						print "\t$a =\t\t{$b ...},\n";
+						last;	# abstract must be last
+					} elsif ($a eq 'error') {
+						print "\t$a =\t\t{$b ...},\n";
+						last;	# error must be last
+					} elsif ($a eq 'note') {
+						print "\t$a =\t\t{$b},\n";
+					} elsif ($a eq 'annote') {
+						print "\t$a =\t{$b},\n";
+					} elsif ($a eq 'url') {
+						print "\t$a =\t\t{$b},\n";
+					} elsif ($a eq 'html') {
+						print "\t$a =\t\t{$b},\n";
+					} else {
+						print "\t$a =\t$b,\n";
+					}
+				} else {
+					die "Extra: $_\n";
+				}
+			}
+		}
+
+		print	"\tyear =\t\t$year\n";
+		print	"\t\}\n";
+	}
+
+	close(TRY);
+}

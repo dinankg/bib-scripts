@@ -1,0 +1,68 @@
+#!/usr/bin/perl -w
+#	b1,grep [-k[ey] key2] key1 file[s]
+#	print .b records containing given key
+
+$/ = "";
+# slurp paragraph at time
+
+$chat = 1;
+
+$key2 = " ";	# trick: just use a space since all records should have that!
+
+if (0) {
+	foreach $file (@ARGV) {
+		print "$file\n";
+	}
+	exit -1;
+}
+
+foreach $file (@ARGV) {
+
+	#
+	#	process optional arguments
+	#
+
+	if ($file eq "-key" || $file eq "-k") {
+		undef	$key2;	# catch it next time!
+		next;
+	}
+
+	if (!defined($key2)) {
+		$key2 = $file;
+		print "key2='$key2'\n";
+		next;
+	}
+
+	if ($file eq "-nochat") {
+		$chat = 0;
+		next;
+	}
+
+	if (!defined($key1)) {
+		$key1 = $file;
+		print "key1='$key1'\n";
+		next;
+	}
+
+	$key1 =~ tr/A-Z/a-z/;
+	$key2 =~ tr/A-Z/a-z/;
+	die "key1?" unless defined($key1);
+
+	open(TRY, $file) || die "Cannot open '$file'\n";
+
+	# get just last part of filename
+	@file = split(/\//, $file);
+	$file = $file[$#file];	
+
+	while (<TRY>) {
+		chop;
+		$tmp = $_;
+		tr/A-Z/a-z/;
+#		if ($_ =~ /$key1/)
+		if (/$key1/ && /$key2/) {
+			print "------ $file\n" if $chat;
+			print "$tmp\n";
+		}
+	}
+	close(TRY);
+}

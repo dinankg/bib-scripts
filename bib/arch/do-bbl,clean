@@ -1,0 +1,12 @@
+#!/bin/csh
+#	do-bbl,clean
+#	remove latex crap from a bbl file
+
+	sed	\
+		-e 's/\\newblock//' \
+		-e 's/\\bibitem.*//' \
+		-e 's/\{//' \
+		-e 's/\}//' \
+		-e 's/\\em //' \
+		-e 's/~/ /g' \
+		newbib.bbl

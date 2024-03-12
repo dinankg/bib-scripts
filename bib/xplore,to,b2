@@ -1,0 +1,62 @@
+#!/bin/csh -e
+# xplore,to,b2
+# convert ieee xplore table of contents to my .b format
+
+if ($#argv > 0) then
+#	set file = $1
+	set cite = "$1"
+else
+	exit -1 
+endif
+	set file = ""
+
+# x2.2
+cat $file \
+	# merge to one big line \
+	| perl -pe 's/[\r\n]+/ /g' \
+# consolidate white space \
+	| perl -pe 's/\s+/ /g' \
+	# split on entry start: ="bodyCopyBlackLargeSpaced"><strong> \
+#	| perl -pe 's/=\"bodyCopyBlackLargeSpaced\"\>\<strong\>/\n jfjfxyz/g' \
+# new on 2009-09-14: \
+	# split on entry start: class="bodyCopyAIPBlackLargeSpaced"> \
+	| perl -pe 's/class=\"bodyCopyAIPBlackLargeSpaced\"\>/\n jfjfxyz/g' \
+	# split on entry end: ="bodyCopySpaced">PDF \
+	| perl -pe 's/=\"bodyCopySpaced\"\>PDF/\n/g' \
+	| grep 'jfjfxyz' \
+	| perl -pe 's/jfjfxyz/\n\n/g' \
+	| xplore,finish "$cite"
+exit
+
+# old way
+cat $file \
+ # eliminate any extra ^M's \
+ | perl -pe 's/ *//g' \
+ # join title lines that are too long \
+ | perl -000 -pe \
+ 's:(<font size="2" face="Verdana">.*)\n(.*)\n(.*)</font></strong>:$1 $2 $3:' \
+ | perl -000 -pe \
+ 's:(<font size="2" face="Verdana">.*)\n(.*)</font></strong>:$1 $2:' \
+ # eliminate "Contributor" paragraphs (e.g. IEEE T-IT) (no, do it later) \
+# | perl -000 -ne 'print unless />\s*Contributors\s*</' \
+ # this font seems to be the one for key information \
+ | grep Verdana\"\> \
+ | grep 'size="[24]"' \
+ | sed -e 's/&nbsp;/ /g' \
+ | sed -e 's/&nbsp/ /g' \
+ # remove the little number that precedes each entry \
+# | sed -e 's:<font size="1" face="Verdana">[0-9]*</font>::' \
+ # remove this junk \
+# | sed -e 's/IEEE JNL//' \
+ | dewhite \
+ # make paragraph break before each title \
+ | perl -pe 'print "\n" if /<strong>/' \
+ # extract abstract url \
+ | xplore,url \
+ # purge any links, such as those to abstracts or subsequent pages \
+ | grep --invert-match --ignore-case 'HREF=' \
+ # purge html junk \
+ | de-html \
+ | tee /tmp/tmp,xtb \
+ # pass to perl script to finish up \
+ | xplore,finish

@@ -1,0 +1,44 @@
+#!/usr/bin/perl -w
+# iop3
+# convert output of iop2
+# mainly extracting page from end of doi
+#
+# input format
+# 	doi\n{title}\n{author}\n{abs}
+# output format
+#	page\n{author}\n{title}\n@u doi (doi)\n{abs}
+#
+# trick: also replaces " and " with ", " in author list
+#
+# 2016-04-09 JF
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/htmlaccent.pl';
+
+$/ = ""; # slurp paragraph at time
+
+while (<STDIN>)
+{
+	next if /reviewed by/;
+	next if /Editorial developments/;
+	next if /Introduction to the 25th Anniversary Issue of/i; # invpro 25 12 dec 2009
+	next if /Author index with titles/;
+
+	$_ = &htmlaccent($_); # convert html accents
+	s/–/-/g; # replace utf-8 dash with normal dash!
+
+	($doi, $title, $author, $abs) = split(/\n/);
+	die "bad entry $doi" unless defined ($abs);
+
+	$doi = "\@u doi $doi";
+	$abs = "\@abs $abs";
+
+	$page = $doi;
+	$page =~ s/.*\///;
+
+	$author =~ s/ and /, /; # trick!
+
+	print "$page\n$author\n$title\n$doi\n$abs\n"; 
+
+	print "\n"; # paragraph separator
+}

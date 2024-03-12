@@ -1,0 +1,138 @@
+#!/bin/csh -e
+# xplore3-conf
+# grab single conference from xplore, all papers, using lynx,
+# convert by calling xplore,to,b2
+# caution: should be run while sitting in the directory of interest.
+#
+# typical url:
+# http://ieeexplore.ieee.org/xpl/tocresult.jsp?isNumber=5192959
+# http://ieeexplore.ieee.org/xpl/tocresult.jsp?isNumber=5192959&ResultStart=25
+
+set this = `basename $0`
+
+if ($#argv < 3) then
+	echo "$this : usage: $argv[0] yr conf isnum [debug]"
+	echo "yr should be 2 digit, e.g., 09, isnum is ....."
+	exit -1
+endif
+set yr = $1
+set conf = $2
+set isnum = $3
+
+if ($#argv > 3) then
+	set debug = 1; # for testing
+else
+	set debug = 0
+endif
+
+set file = ${conf}-${yr}
+if (!($debug) && (-e $file)) then
+	echo "$this : $file already exists"
+	exit 0
+endif
+
+echo "# $yr $conf $isnum" > $file
+echo "" >> $file
+
+#
+# loop over pages until no more
+#
+set base = 'http://ieeexplore.ieee.org/xpl/tocresult.jsp?isNumber='
+set page = 0
+while (1)
+	set tmp_raw = /tmp/t,x3,raw,$yr,$conf,$isnum,p=$page.htm
+	set tmp_cite = /tmp/t,x3,cite,$yr,$conf,$isnum,p=$page.htm
+
+	# initial url for this page of TOC
+	set url = "$base$isnum&page=$page"
+
+	if ($page > 0) then
+		set start = `echo "25 * $page" | bc -l`
+		set url = "$url&ResultStart=$start"
+	endif
+	echo "$this : conf=$conf isnum=$isnum page=$page url below:"
+	echo "$this : $url"
+
+	if (!($debug) || !(-e $tmp_raw)) then
+		lynx -accept_all_cookies -source "$url" >! $tmp_raw
+	endif
+
+if 0 then
+	set has_cover = `cat $tmp_raw | perl -ne 'print "1" if /cover_images/'`
+
+	if ("$has_cover" != 1) then
+		echo "$this : issue appears incomplete (no cover image)"
+		if ($page != 0) then
+			echo "$this : not on page 0???"
+#			exit -1
+			echo "$this : warning, assuming out of pages"
+			break
+		endif
+		echo "$this : warning, continuing anyway"
+#		/bin/rm $tmp_raw
+#		exit 0
+	endif
+endif
+
+	# determine how many continuation pages
+	# since in x2.0, no way to distinguish error page from end page
+	set hasnext = 0
+	if ($page == 0) then
+		# sometime there are so many pages that there is a "Next" link
+		set hasnext = `cat $tmp_raw | perl -ne 'if (/Next \&gt\;/) {print "1"}'`
+		if ("$hasnext" != "") then
+			set pages = 22; # large value
+		else
+			set pages = `cat $tmp_raw | xplore3,pages`
+		endif
+		echo "$this : pages=$pages in $tmp_raw"
+	endif
+
+	# see if error page
+	set done = `cat $tmp_raw | perl -ne 'print "1" if (/Error Page/)'`
+	if ("$done" == 1 && "$hasnext" == 0) then
+		echo "$this : ieee error page on url=$url"
+		exit -1
+		break
+	endif
+
+	# see if last page (for cases with Next>)
+	set done = `cat $tmp_raw | perl -ne 'print "1" if (/No data available in database/ | /Your request cannot be processed/)'`
+	if ("$done" == 1 && "$hasnext" == 1) then
+		echo "done"; echo ""
+		break
+	endif
+
+if 1 then
+	set cite = "$conf . pppp 20$yr"; # todo: 2000 and beyond only?
+else
+	# determine journal volume issue month year
+	cat $tmp_raw | xplore3,cite >! $tmp_cite
+	set cite = "`cat $tmp_cite`"
+endif
+	echo "$this : cite = $cite"
+
+	echo "$this : converting to $file"
+	if ($debug) then
+		cat $tmp_raw | xplore,to,b2 "$cite" | sed -e 's/@a/@c/'; exit -1 # for testing
+	else
+		cat $tmp_raw | xplore,to,b2 "$cite" | sed -e 's/@a/@c/' >> $file
+	endif
+	wc $file
+
+	/bin/rm $tmp_raw # $tmp_cite
+
+	# done if last continuation page
+	if ($page == $pages) break
+
+	@ page += 1
+	sleep 1
+end
+
+# look for stray html codes with '&' in them
+set bad = `cat $file | perl -ne 's/ \& //g; print "1" if /[^\\]\&/'`
+if ("$bad" != "") then
+	echo "$this : html conversion incomplete. see $file"
+	echo "vi $file"
+	exit -1
+endif

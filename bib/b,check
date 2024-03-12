@@ -1,0 +1,100 @@
+#!/usr/bin/perl -w
+# b,check
+# verify 3 letter codes for keys in .b files
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/bibkey.pl';
+
+$/ = ""; # slurp paragraph at time
+
+print "b,check: checking\n";
+foreach $file (@ARGV)
+{
+	die "cannot open file `$file'" unless open(Bfile, $file);
+#	print "$file\n";
+
+	$skip_block = 0;
+	while (<Bfile>)
+	{
+		chop;
+
+		if (/^\#\-/ | /^\#\{/) # start skipping comment block
+		{
+			print STDERR "comment block in comment block?\n"
+				if ($skip_block);
+			$skip_block = 1;
+			next;
+		}
+
+		if (/^\#\+/ | /^\#\}/) # stop skipping comment block
+		{
+			die "stray comment end?" if (!$skip_block);
+			$skip_block = 0;
+			next;
+		}
+
+		next if $skip_block;
+
+		next if /^#/;	# skip comment lines
+		next if /^\@b/;	# skip books
+#		print "`$_'\n";
+
+		@bibkey = &bibkey($_); # parse author, year, code
+		($author, $year, $code) = @bibkey;
+		die "code" unless defined($code);
+
+		($type, $key) = /(@\S+) ([^ ]*) /;
+		die "key" unless defined($key);
+#		print "`$type' `$key'\n";
+
+		$type =~ s/,\S+$//; # remove any qualifiers after type
+
+		# if code begins with "!" then do not check code for @m,@r type
+		next if (($type eq "\@m") && ($key =~ /^\!/));
+		next if (($type eq "\@r") && ($key =~ /^\!/));
+
+		($Kauthor, $Kyear, $Kcode) = $key =~ /(.*):(.*):(.*)/;
+		die "no Kcode in `$key'" unless defined($Kcode);
+
+		# for dissertations, :phd ok
+		next if ($type eq "\@d" && ($Kcode =~ /phd/));
+
+		$Kcode =~ s/-.*//; # delete anything after '-' in key
+
+		if (($Kyear ne "") && !($Kyear =~ /\?/))
+		{
+			if ($Kyear ne $year)
+			{
+				print "File = $file\n";
+				die "year=$Kyear,$year $Kcode $author\n";
+			}
+		}
+
+		if ($Kauthor ne $author)
+		{
+			print "$file	$Kcode\n";
+			die "author key = $Kauthor, but should be $author\n";
+		}
+
+		if ($Kcode ne $code)
+		{
+			print "File = $file key=$key\n";
+			die "Kcode='$Kcode' code='$code' by $author in $file\n";
+		}
+
+		# check for repeated key
+		if (defined($File{$key}))
+		{
+			$repeat = "\nRepeats:\n" unless defined($repeat);
+			$repeat = $repeat . "$key\t$File{$key}\t$file\n"
+		}
+		else {
+			$File{$key} = $file;	# store file for this code
+		}
+	}
+
+	close(Bfile);
+}
+
+# print repeated codes if any
+print "$repeat\n" if defined($repeat);

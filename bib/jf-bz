@@ -1,0 +1,35 @@
+#!/bin/csh -e
+# jf-bz
+# run bibtex or biber
+
+if (-e z.bcf) then
+	set b = `which biber`
+
+	if 0 then
+		set ver = `biber --version | awk '{print $3}'`
+		echo "biber version = $ver"
+		if ("$ver" == 2.1) then
+			# 2.1 has issues with \" so using development 2.2 version for now
+			# until macports does an update
+			# https://quote.ucsd.edu/rogblog/2015/07/27/264/
+			# http://sourceforge.net/projects/biblatex-biber/files/biblatex-biber/development/
+			set bdev = ~/bin/mi64-gcc/tmp/biber_2p2_dev
+			if (-e $bdev) then
+				echo "WARN: using development version of biber for now"
+				set b = $bdev
+			else
+				echo "WARN: cannot find 2.2 biber"
+			endif
+		endif
+
+		echo "using $b"
+	endif
+
+	$b z $*
+
+	echo " "
+	grep "didn't find" z.blg # search for errors
+
+else
+	bibtex z $*
+endif

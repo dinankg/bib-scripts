@@ -1,0 +1,77 @@
+#!/usr/bin/perl -w
+# icip14,finish
+# format entries based on html parsing of icip/14.htm
+# each paragraph is:
+# ZZ1 (time?) number.
+# TITLE
+# authors
+# @an affiliations
+
+$year4 = 2014;
+
+$home = $ENV{HOME};
+$bib = $home . '/l/src/script/bib/';
+require $bib . 'tolower.pl';
+require $bib . 'author.pl';
+require $bib . 'bibkey.pl';
+require $bib . 'htmlaccent.pl';
+
+$/ = ""; # slurp paragraph at time
+
+while (<STDIN>) {
+#	print "\n`$_'\n";
+
+	if (/^#/) {
+		print $_;
+		next;
+	}
+
+#	next if (/^#$/); # blank line
+
+#	next if (/^$/); # blank line
+
+	($line1, $title, $auth, $an) = split(/\n/);
+#	next unless defined($an); # need all 4
+
+	die "bad `$_'\n" unless defined($an);
+
+	die "line1 `$line1'\n `$_'" unless ($line1 =~ /^ZZ1 /);
+	$line1 =~ s/ZZ1 //;
+	$line1 =~ s/.* //;
+	$line1 =~ s/\.$//;
+
+	if (0) {
+		$auth =~ s/, M\.D\.//;
+		$auth =~ s/, Ph\.D\.//;
+		$auth =~ s/, M\.R\.C\.P\.//;
+		$auth =~ s/, F\.R\.C\.R\.//;
+	}
+
+	if (0) {
+		$auth =~ s/, \d,/,/g;
+		$auth =~ s/\d,/,/g;
+		$auth =~ s/\d$//;
+		$auth =~ s/, +/, /g;
+	}
+
+	$auth = &author($auth);
+#	$auth =~ s/,  /  /g;
+#	$auth =~ s/,$//;
+#	$auth =~ s/,\}/\}/;
+	print STDERR "auth `$auth'\n" if ($auth =~ /,/);
+
+	$title = &tolower($title); # because all caps
+#	$title = &TitleLower($title);
+
+	$page = '?';
+	$cite = "icip . $page $year4";
+	$fake = "\@c xx:xx:xx $cite\n$auth\n$title";
+	@bibkey = &bibkey($fake); 
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	print "\n\@c $key $cite\n";
+	print "$auth\n$title\n";
+	print "$an\n" if defined($an);
+}

@@ -1,0 +1,34 @@
+#!/usr/bin/perl -w
+# spie04,finish
+# format entries based on spie04 web page html
+# each line is title,### authors [conf-#]
+
+$home = $ENV{HOME};
+$bib = $home . '/l/src/script/bib/';
+require $bib . 'tolower.pl';
+require $bib . 'author.pl';
+require $bib . 'bibkey.pl';
+require $bib . 'htmlaccent.pl';
+
+while (<STDIN>) {
+#	print "`$_'\n";
+
+	($title, $auth, $vol, $num) = m/([^<]*),\#\#\# (.*) \[(.*)-(.*)\]/;
+	die "bad `$_'\n" unless defined($num);
+
+#	$auth =~ s/, /; /g;
+#	$auth =~ s/,  /, /g;
+#print "\n$auth\n";
+	$auth = &htmlaccent($auth);
+	$auth = &author($auth);
+
+	$cite = "spie-$vol . $num 2004";
+	$fake = "\@c xx:xx:xx $cite\n$auth\n$title";
+	@bibkey = &bibkey($fake); 
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	print "\n\@c $key $cite\n";
+	print "$auth\n$title\n";
+}

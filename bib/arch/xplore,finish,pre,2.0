@@ -1,0 +1,178 @@
+#!/usr/bin/perl -w
+# xplore,finish
+# following xplore,to,b2 preprocessing,
+# finish converting from IEEE xplore html format to my .b2 format
+# first paragraph is journal information, rest is entries
+# lines: title \\ authors \\ pages \\ url
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/tolower.pl';
+require $home . '/l/src/script/bib/author.pl';
+require $home . '/l/src/script/bib/bibkey.pl';
+
+#
+# slurp paragraph at time
+#
+$/ = "\n\n";
+
+#
+# first paragraph has journal citation info
+#
+$_ = <STDIN>;
+$save = $_;
+#print "in=`$_'";
+$ieee = ", IEEE Transactions on\n";
+
+%mag = (
+ "ASSP Magazine, IEEE ", "ieee-asspmag",
+ "Acoustics, Speech, and Signal Processing", "ieee-t-assp",
+ "Biomedical Engineering$ieee", "ieee-t-bme",
+ "Image Processing$ieee", "ieee-t-ip",
+ "Information Theory$ieee", "ieee-t-it",
+ "Medical Imaging$ieee", "ieee-t-mi",
+ "Nuclear Science$ieee", "ieee-t-ns",
+ "Pattern Analysis and Machine Intelligence$ieee", "ieee-t-pami",
+ "Proceedings of the IEEE\n", "ieee-proc",
+ "Signal Processing Magazine, IEEE\n", "ieee-spmag",
+ "Signal Processing Letters, IEEE\n", "ieee-spl",
+#"Signal Processing$ieee", "ieee-t-sp";	# old way
+ "Signal Processing, IEEE Transactions on ", "ieee-t-sp"
+ );
+
+$found = 0;
+while (($long, $short) = each %mag) {
+#	print "long=`$long' short=`$short'\n";
+	
+	if (/$long/) {
+		if ($short eq "ieee-asspmag") {
+			s/$long\[see also .*\]\n/$short/;
+		}
+		elsif ($short eq "ieee-t-assp") {
+			s/$long[^,]*$ieee"/$short/;
+		}
+		elsif ($short eq "ieee-t-sp") {
+			s/$long\[see also .*\]\n/$short/;
+		}
+		else {
+			s/$long/$short/;
+		}
+		$found = 1;
+		next;
+	}
+}
+die "journal title not found" if !($found);
+
+#s/ASSP Magazine, IEEE \[see also .*\]\n/ieee-asspmag/;
+#s/Acoustics, Speech, and Signal Processing[^,]*$ieee/ieee-t-assp/;
+#s/Image Processing$ieee/ieee-t-ip/;
+#s/Information Theory$ieee/ieee-t-it/;
+#s/Medical Imaging$ieee/ieee-t-mi/;
+#s/Nuclear Science$ieee/ieee-t-ns/;
+#s/Pattern Analysis and Machine Intelligence$ieee/ieee-t-pami/;
+#s/Proceedings of the IEEE\n/ieee-proc/;
+#s/Signal Processing Magazine, IEEE\n/ieee-spmag/;
+#s/Signal Processing Letters, IEEE\n/ieee-spl/;
+#s/Signal Processing, IEEE Transactions on \[see also .*\]\n/ieee-t-sp/;
+##s/Signal Processing$ieee/ieee-t-sp/;	# old way
+
+s/Volume: (\d*),*/ $1/;
+s/,*\s*Part:\s*(\d*)/-$1/;	# merge Part with Issue
+s/\s*Issue: (\d*)/ $1/;
+s/Year: / /;		# remove "Year:" string
+s/\s*,\s*/ pppp /;	# final , is where pages (tbd) go
+s/\s+$//;	# trailing space
+tr/A-Z/a-z/;	# uncap month
+$cite0 = $_;
+#print "cite0=`$cite0'\n\n";
+
+die "bad title `$save'\n`$_'\n" if (/\[see also/ || /IEEE Transactions/);
+
+while (<STDIN>) {
+#	print "`$_'\n";
+
+	next if /Abstracts of Manuscripts/;
+	next if /Author Index/;
+	next if /Back cover/;
+	next if /Books received/;
+	next if /call for papers/;
+	next if /Edics/;
+	next if /Erratum/;
+	next if /Front cover/;
+	next if /IEEE .* Society Information/;
+	next if /IEEE International Conference/i;
+	next if /Information for Authors/i;
+	next if /List of Reviewers/;
+	next if /Notice to Readers/i;
+	next if /Page\(s\): 0- 0/;
+	next if /publication information/i;
+	next if /Special Issue on/i;
+	next if /Table of Contents/i;
+	next if /^Contributors\n/;
+	next if /IEEE International Symposium/;
+	next if /IEEE Membership Application\n/;
+	next if /blank page\n/;
+
+	@all = split(/\n/);
+	$nline = $#all + 1;
+
+	$url = "";
+	if ($nline == 5) {
+		$page1 = $all[2];
+		$page2 = $all[3];
+		$pages = "$page1$page2";
+		$url = $all[4];
+	}
+	elsif ($nline == 4) { # title \ author \ pages \ url
+		$pages = $all[2];
+		$url = $all[3];
+	}
+	elsif ($nline == 3) {
+		$pages = $all[2];
+		$url = "";
+	}
+	else {
+		print STDERR "skipping bad paragraph:\n`$_'\n";
+		next;
+	}
+
+	$title = $all[0];
+	$title = &TitleLower($title); # T-MI needs this, T-SP does not... :-(
+	$auth = &author($all[1]);
+
+	$pages =~ s/Page\(s\): //;
+	$pages =~ s/\s*//g;	# purge extra spaces in pages line
+	die "bug all=`@all'\n" if $pages =~ /ieee/;
+
+	$fakeb2 = "\@a xx:xx:xx $cite0\n$auth\n$title\n";
+	@bibkey = &bibkey($fakeb2);
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	$cite = $cite0;
+	$cite =~ s/pppp/$pages/;
+
+	$cite =~ s/january/jan/;
+	$cite =~ s/jan\./jan/;
+	$cite =~ s/february/feb/;
+	$cite =~ s/feb\./feb/;
+	$cite =~ s/march/mar/;
+	$cite =~ s/april/apr/;
+#	$cite =~ s/may/may/;
+	$cite =~ s/jun[e.]/jun/;
+	$cite =~ s/july/jul/;
+	$cite =~ s/august/aug/;
+	$cite =~ s/aug\./aug/;
+	$cite =~ s/september/sep/;
+	$cite =~ s/sept\./sep/;
+	$cite =~ s/october/oct/;
+	$cite =~ s/oct\./oct/;
+	$cite =~ s/november/nov/;
+	$cite =~ s/nov\./nov/;
+	$cite =~ s/december/dec/;
+	$cite =~ s/dec\./dec/;
+
+	print "\n\@a $key $cite\n";
+	print "$auth\n$title\n";
+	print "$url\n";
+}

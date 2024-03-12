@@ -1,0 +1,24 @@
+#!/usr/bin/perl -w
+# de-html
+# remove html tags within <...> from stdin and write to stdout
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/htmlaccent.pl';
+
+#
+# for each line...
+#
+while (<STDIN>) {
+	chop;		# remove newline
+
+	s/&nbsp;/ /;	# space
+	s/<[^>]+>//g;	# html junk
+	s/^\s+//;	# leading spaces
+
+	$_ = &htmlaccent($_);	# convert html accents
+
+#	retain blank lines?
+#	next if ($_ eq "");
+
+	print "$_\n";
+}

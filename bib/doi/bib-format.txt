@@ -1,0 +1,10 @@
+key.number.separator = ""
+fmt.et.al = ""
+key.format = {short}
+expand.macros = ON
+delete.field {month}
+print.line.length = 1000
+print.braces = OFF
+fmt.name.name = ""
+new.format.type = { 17="%l " }
+rewrite.rule { author # ".*" # "\"%100.17p(author)\"" }

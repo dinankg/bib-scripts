@@ -1,0 +1,16 @@
+#!/bin/csh
+# month,lower,3
+# change capital months to 3 letter lowercase months for .b files
+
+perl -pe 's/(Jan|January) /jan /g' \
+| perl -pe 's/(Feb|February) /feb /g' \
+| perl -pe 's/(Mar|March) /mar /g' \
+| perl -pe 's/(Apr|April) /apr /g' \
+| perl -pe 's/(May) /may /g' \
+| perl -pe 's/(Jun|June) /jun /g' \
+| perl -pe 's/(Jul|July) /jul /g' \
+| perl -pe 's/(Aug|August) /aug /g' \
+| perl -pe 's/(Sep|September) /sep /g' \
+| perl -pe 's/(Oct|October) /oct /g' \
+| perl -pe 's/(Nov|November) /nov /g' \
+| perl -pe 's/(Dec|December) /dec /g'

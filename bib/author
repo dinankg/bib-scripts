@@ -1,0 +1,40 @@
+#!/usr/bin/perl -w
+# author
+# reformat author names
+
+$key = shift;
+$key = 1 unless defined($key);
+#$key = 1;
+#print "$key\n"; exit;
+
+$home = $ENV{HOME};
+$dir = "$home/l/src/script/bib";
+#$dir = '.'; # for test
+require "$dir/author.pl";
+require "$dir/author1last.pl";
+
+if (0)
+{
+	# from man perllocale, to see what \w will match
+	use locale;
+	print +(sort grep /\w/, map { chr } 0..255), "\n";
+	no locale;
+	print +(sort grep /\w/, map { chr } 0..255), "\n";
+	exit;
+}
+
+# for each line...
+while (<>)
+{
+	$line = author($_);
+	$line =~  s/\{([^\}]*)\}/$1/g;   # {Who} to Who
+#	s/\s+$//; # trailing spaces
+
+	if ($key) # extra line key
+	{
+		$n1 = author1last($line);
+		print "\@a $n1:\n";
+	}
+
+	print "$line\n";
+}

@@ -1,0 +1,34 @@
+#!/usr/bin/perl -w
+# b,addcode
+# given a .b2 file with entry @? author:yr: ... with no title code, add it!
+# the first line should have a ': ' where the title code codes
+
+$home = $ENV{HOME};
+$ssb = $home . '/l/src/script/bib/';
+require $ssb . 'titlecode.pl';
+
+# $/ = "\n\n"; # slurp paragraph at time
+$/ = ""; # slurp paragraph at time
+
+while (<STDIN>) {
+
+	if (/^\#/) {
+		print "$_"; # echo comments
+		next;
+	}
+
+	($cite, $author, $title, @extra) = split(/\n/); # input lines
+	die "no title $_" unless defined($title);
+
+	$code = &titlecode($title);
+	$cite =~ s/: /:$code /;
+
+	$cite =~ s/ ismrm \? / ismrm . /;
+
+	print "$cite\n$author\n$title\n";
+	if (defined @extra) {
+		print "@extra\n\n";
+	} else {
+		print "\n";
+	}
+}

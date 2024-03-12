@@ -1,0 +1,33 @@
+#!/bin/csh -e
+# doi,ieee isnum arnum
+# convert old ieee code style into new doi
+
+set isnum = $1
+set arnum = $2
+# remove leading zeros from article number
+set arnum = `echo $arnum | perl -pe 's/^0*//g'`
+
+set tmp_wrap = /tmp/t,di,wrap.htm
+set tmp_frag = /tmp/t,di,frag
+
+set url = \
+'http://ieeexplore.ieee.org/xpls/abs_all.jsp?arnumber='"$arnum"
+#'http://ieeexplore.ieee.org/search/wrapper.jsp?arnumber='"$arnum"
+#'http://proxy.lib.umich.edu/login?url='"$url"
+#echo "@u $url"
+#open "$url"
+
+if 1 then
+	lynx -source "$url" >! $tmp_wrap
+endif
+
+	cat $tmp_wrap \
+	| grep -e "href='http://(dx.)?doi.org/" \
+	| perl -pe 's/.*\.org\///' \
+	| perl -pe "s/\'//" \
+	>! $tmp_frag
+
+set doi = `cat $tmp_frag`
+echo '@u doi' $doi
+
+/bin/rm -f /tmp/t,di,*

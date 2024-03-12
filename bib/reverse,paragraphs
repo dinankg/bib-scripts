@@ -1,0 +1,14 @@
+#!/usr/bin/perl -w
+# reverse,paragraphs
+# print stdin to stdout, reversing order of paragraphs
+# for putting citations in bibliography in reverse order
+
+$/ = "\n\n"; # slurp paragraph at time
+
+$out = "";
+while (<STDIN>)
+{
+	$out = $_ . $out;
+}
+
+print "$out";

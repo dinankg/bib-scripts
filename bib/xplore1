@@ -1,0 +1,259 @@
+#!/bin/csh
+# xplore1
+# step1: get "isNumber" from ieee xplore, store in "isnum" subdirectory
+# caution: should be run from within the directory of the journal!
+
+alias note "echo `basename $0` :"
+
+if ($#argv >= 1) then
+	set pnum = $1
+else
+	set jour = `pwd`
+	set jour = `dirname $jour`
+	set jour = `pwd | sed -e 's:'"$jour"'/::'`
+	note $jour
+
+	if ($jour == proc) then
+		set pnum = 5
+	else if ($jour == asspmag) then
+		set pnum = 53
+	else if ($jour == embmag) then
+		set pnum = 51
+	else if ($jour == jstsp) then
+		set pnum = 4200690
+	else if ($jour == spl) then
+		set pnum = 97
+	else if ($jour == spmag) then
+		set pnum = 79
+	else if ($jour == tassp) then
+		set pnum = 29
+	else if ($jour == tbme) then
+		set pnum = 10
+	else if ($jour == tci) then
+		set pnum = 6745852
+	else if ($jour == tit) then
+		set pnum = 18
+	else if ($jour == tmi) then
+		set pnum = 42
+	else if ($jour == tip) then
+		set pnum = 83
+	else if ($jour == tns) then
+		set pnum = 23
+	else if ($jour == tpami) then
+		set pnum = 34
+	else if ($jour == tsp) then
+		set pnum = 78
+	else
+		note "journal not done - fix xplore1"
+		exit -1
+	endif
+endif
+
+set tmp_dir = .
+set tmp_top = $tmp_dir/t,x1,top.htm; # raw html
+set tmp_yrs = $tmp_dir/t,x1,yrs.htm; # html with one line per year
+set tmp_yvi = $tmp_dir/t,x1,yvi.htm; # year [vol num issue]
+
+#set url = "http://ieeexplore.ieee.org/xpl/RecentIssue.jsp?puNumber=$pnum"
+set url = \
+ "http://ieeexplore.ieee.org/servlet/opac?punumber=$pnum" # "persistent link"
+#set url = \
+# "http://ieeexplore.ieee.org/servlet/opac?punumber=$pnum&isvol=28&isno=12"
+note "$url"
+
+# get raw htm from journal top page
+if !(-e $tmp_top) then
+	note "get top html"
+	urlsrc "$url" | perl -pe 's///g' > $tmp_top
+else
+	note "$tmp_top already exists"
+endif
+
+set ok = `cat $tmp_top | perl -ne 'print "1" if /Past Issues/'`
+# set ok = `cat $tmp_top | perl -ne 'print "1" if /var issuesMap/'` # 2014-06
+if ("$ok" != "1") then
+	note "no 'Past Issues' in $tmp_top" # 2014-06
+#	note "no issuesMap in $tmp_top"
+	rm -i $tmp_top
+	exit -1
+endif
+
+# extract list of issues for each year
+if !(-e $tmp_yrs) then # 2014-06
+	cat $tmp_top \
+		# merge to one big line \
+		| perl -pe 's/[\r\n\t]+/ /g' \
+		# remove all before Past Issues list \
+		| perl -pe 's/.*Past Issues//' \
+		# merge spaces \
+		| perl -pe 's/\s+/ /g' \
+		| perl -pe 's/\<ul id="pi\-(\d\d\d\d)"\>/\nY4=$1 /g' \
+		| perl -ne 'print if /^Y4/' \
+		# sort in reverse cron order \
+		| sort -r \
+		> $tmp_yrs
+endif
+
+
+# extract info about: year [vol num issue]
+# 1983 [2 4 4307631],[2 3 4307621],[2 2 4307613],[2 1 4307600]
+# 1982 [1 4 4307575],[1 3 4307564],[1 2 4307552],[1 1 4307537]
+if 0 then # old - before 2014-06
+	cat $tmp_top \
+		# merge to one big line \
+		| perl -pe 's/[\r\n\t]+/ /g' \
+		# remove all before issues list \
+		| perl -pe 's/.*var issuesMap = {[^"]*\"//' \
+		# remove all after issues list \
+		| perl -pe 's/}.*/\n/' \
+		# split years into lines \
+		| perl -pe 's/\],"/]\n/g' \
+		# clean \
+		| perl -pe 's/"//g' \
+		| perl -pe 's/Volume: //g' \
+		| perl -pe 's/Issue: //g' \
+		| perl -pe 's/ ,/ /g' \
+		| perl -pe 's/ ://' \
+		| perl -pe 's/\[//' \
+		| perl -pe 's/ \].*//' \
+		>! $tmp_yvi
+endif
+
+
+# list of years
+if 0 then # old
+	set years = `awk '{print $1}' < $tmp_yvi`
+	set year0 = ($years)
+	set year0 = $year0[1]; # current year
+endif
+
+# list of years
+if 1 then # 2014-06
+	set years = `cat $tmp_yrs | perl -pe 's/^Y4=(\d\d\d\d).*/$1 /g'`
+	set year0 = ($years)
+	set year0 = $year0[1]; # current year
+#	echo $year0
+#	echo $years; exit
+endif
+
+
+# for each year, parse issues
+foreach y4 ($years)
+	set file = isnum/$y4
+	if (($y4 != $year0) && (-e $file)) then
+	#	note "$y4 already in $file"
+		continue
+	endif
+
+	note "getting issues for year=$y4"
+
+	grep '^Y4='$y4 $tmp_yrs \
+		# split lines at <li> or </li> \
+		| perl -pe 's/\<[\/]?li\>/\n /g' \
+		# find "isnumber" lines, e.g.: \
+		# <a href="/xpl/tocresult.jsp?isnumber=6678249&punumber=78"> Vol: 62 Issue: 1 </a> \
+		| perl -ne 'print if /isnumber=/' \
+		# simplify to: isnumber vol issue[-part] \
+		| perl -pe 's/.*isnumber=//' \
+		| perl -pe 's/\&punumber=\d+\"\> Vol://' \
+		| perl -pe 's/Issue: //' \
+		| perl -pe 's/PAMI-//' \
+		| perl -pe 's/ Part: /-/' \
+		| perl -pe 's/\<\/.*//' \
+		>! $file
+
+	if 0 then # old
+		cat $tmp_yvi \
+			| grep -e '^'$y4 \
+			| perl -pe 's/.... //' \
+			| perl -pe 's/,/\n/g' \
+			| perl -pe 's/\[//g' \
+			| perl -pe 's/\]//g' \
+			| tac \
+			> $file
+	endif
+
+	set n_issue = `wc -l $file`
+	set n_issue = `echo $n_issue | awk '{print $1}'`
+	note "$n_issue issues in year $y4"
+end
+
+/bin/rm $tmp_top $tmp_yrs # $tmp_yvi
+
+exit # 2014-06
+
+#################### old below here
+
+#set tmp_issue = /tmp/t,x1,issue.htm
+#set tmp_year = /tmp/t,x1,year.htm
+
+#
+# find isNumbers from current year, if any
+#
+if 1 then
+	note "finding isNumbers from current year"
+	cat $tmp_top | xplore1,isnum > $tmp_issue
+	set n_issue = `cat $tmp_issue | wc -l`
+	note "$n_issue issues in current year"
+endif
+
+#
+# list of years online
+#
+if 1 then
+	# xplore 2.0
+	cat $tmp_top \
+		# merge to one big line \
+		| perl -pe 's/[\r\n]+/ /g' \
+		# split \
+		| perl -pe 's/\<option value=\"(\d\d\d\d)\"/\njfyear=$1\n/g' \
+		| grep 'jfyear=' \
+		| perl -pe 's/jfyear=//' \
+		>! $tmp_year
+
+	set year0 = `head -1 $tmp_year`
+	set years = `cat $tmp_year`
+
+	#set year0 = \
+#	`cat $tmp_issue | perl -pe 's/\n//' | perl -pe 's/.*(20[0-9]{2}).*/$1/'`
+	note "current year '""$year0'"
+
+#	set years = `cat $tmp_top | grep "/xpl/RecentIssue.jsp?puNumber=$pnum&year=" | perl -pe 's/.*year=(\d{4}).*/$1/'`
+#	set years = "$year0 $years"
+endif
+
+
+#
+# for each year, extract isNumbers for that year
+#
+foreach year ($years)
+	set yr = `echo $year | perl -pe 's/^19//; s/^20//'`
+	set file = isnum/$yr
+	if (($year != $year0) && (-e $file)) then
+		note "$year isNumbers already stored in $file"
+		continue
+	endif
+
+	note "getting isNumbers for year=$year"
+
+	set url = \
+"http://ieeexplore.ieee.org/xpl/RecentIssue.jsp?puNumber=$pnum&year=$year"
+#	note "$url"
+	lynx -source "$url" > $tmp_year
+
+	cat $tmp_year | xplore1,isnum | tac >! $file
+
+	if 0 then
+		cat $tmp_year | grep -e Issue \
+		# extract isNumber and Issue from html \
+		# ...jsp?isNumber=26678"> April 2003, Vol.50, Issue 2</a>... \
+		| perl -ne 'if (/tocresult.jsp\?isNumber=/) { s/.*isNumber=(\d*).* Issue (\d*).*/$1 $2/; print;}' \
+		# reverse bottom to top (so issue 1 is first) \
+		| tac \
+		>! $file
+	endif
+
+	sleep 1
+end
+
+/bin/rm $tmp_top $tmp_issue $tmp_year

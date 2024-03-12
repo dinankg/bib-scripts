@@ -1,0 +1,511 @@
+#!/usr/bin/perl -w
+# b,html
+# convert my .b file format into .html file format for my web page
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/at_u.pl';
+
+$pmc_root = "http://www.ncbi.nlm.nih.gov/pubmed/"; # root for pubmed
+
+#$ftp = "ftp://www.eecs.umich.edu/people/fessler/ps";
+#$talk = "ftp://www.eecs.umich.edu/people/fessler/talk";
+$ftp = "files";
+$talk = "files/talk";
+
+my ($sec,$min,$hour,$mday,$mon,$year, $wday,$yday,$isdst) = localtime time;
+$year += 1900;
+$mon += 1;
+$date = "$year-$mon-$mday";
+$olf = "<ol>"; # 2015-10-09
+$olr = "<ol reversed>"; # 2014-12-05
+
+if ($ARGV[0] =~ /jf,phd,comm.b/) {
+	print "<title>Fessler, Jeffrey A.: Phd Theses</title>\n";
+	print "
+	Dissertation committee memberships.\nUpdated $date\n<hr>$olr\n";
+
+} elsif ($ARGV[0] =~ /jf,phd,chair.b/) {
+	print "<title>Fessler, Jeffrey A.: Phd Theses Chaired</title>\n";
+	print "
+	Doctoral dissertations chaired.\nUpdated $date\n<hr>$olr\n";
+
+} elsif ($ARGV[0] =~ /jf,phd,cochair.b/) {
+	print "<title>Fessler, Jeffrey A.: Phd Theses Co-chaired</title>\n";
+	print "
+	Doctoral dissertations co-chaired.\nUpdated $date\n<hr>$olr\n";
+
+} elsif ($ARGV[0] =~ /jf,proc.b/) {
+	print "<title>Fessler, Jeffrey A.: Conference Proceedings Papers</title>\n";
+	print "<h3>Conference Proceedings Papers</h3>\n\n$olf\n";
+
+} elsif ($ARGV[0] =~ /jf,abs.b/) {
+	print "<title>Fessler, Jeffrey A.: Conference Abstracts</title>\n";
+	print "<h3>Conference Abstracts</h3>\n\n$olf\n";
+
+} elsif ($ARGV[0] =~ /jf,tr.b/) {
+	print "<title>Fessler, Jeffrey A.: Technical Reports, Etc.</title>\n";
+	print "<h3>Technical Reports, Etc.</h3>\n\n$olf\n";
+
+} elsif ($ARGV[0] =~ /jf,chap.b/) {
+	print "<title>Fessler, Jeffrey A.: Chapters</title>\n";
+	print "<h3>Fessler, Jeffrey A.: Chapters, etc.</h3>\n\n$olr\n";
+
+} else {
+	print "<title>Fessler, Jeffrey A.: Journal Papers</title>\n";
+	print "<h3>Fessler, Jeffrey A.: Journal Papers</h3>\n";
+	print "<a name=top> </a>\n";
+}
+
+#
+# read in abbreviations
+#
+if (1) {
+	$dir = "$home/l/tex/biblio";
+	$file = "$dir/bib/abbrev.bib";
+	open(Afile, $file) || die "Cannot open '$file'\n";
+	while (<Afile>) {
+		next unless /=/;
+		s/ &/ \\&/;    # & to \& for latex
+		($abbr, $long) = /\@string{(\S+)\s+=\s*"(.*)"}/;
+		$Abbr{$abbr} = $long;
+	}
+	close(Afile);
+
+	$file = "$dir/bib/spie.txt";
+	open(Afile, $file) || die "Cannot open '$file'\n";
+	while (<Afile>)
+	{
+		next unless /\t/; # skip blank lines (without tab)
+		s/ &/ \\&/; # & to \& for latex
+		($abbr, $long) = /(\S+)\s+(.*)/;
+		$abbr_spie = "spie-$abbr";
+		die "abbrev problem `$_'" unless defined($long);
+#		print "abbr='$abbr' long='$long'\n"; # debugging
+		$Abbr{$abbr_spie} = "Proc. SPIE $abbr $long";
+	}
+	close(Afile);
+}
+
+$/ = ""; # slurp paragraph at time
+
+#
+# headers for each category
+#
+$headfull = "\
+</ol>\n<hr>\n
+<a name=full> </a>\n
+<h3>Published journal papers</h3>\n
+\n
+Most of the links below are to the final published papers
+at the publisher's web site.<br>\n
+If you do not have access to those sites,
+you can probably find a reprint or preprint
+in <a href=\"$ftp\"> this archive</a>.\n
+If you find a preprint interesting,
+then please get the original
+because the preprint may differ from the final version.\n
+$olr\n";
+
+$headabandon = "\
+</ol>\n<hr>\n
+<a name=abandon> </a>\n
+<h3>Abandoned papers</h3>\n
+$olr\n";
+
+$headshort = "\
+</ol>\n<hr>\n
+<a name=short> </a>\n
+<h3>Short communications in refereed journals</h3>\n
+$olr\n";
+
+$headinpress = "\
+</ol>\n<hr>\n
+<a name=inpress> </a>\n
+<h3>In-press journal papers</h3>\n
+$olr\n";
+
+$headreject = "\
+</ol>\n<hr>\n
+<a name=reject> </a>\n
+<h3>Rejected journal papers</h3>\n
+$olr\n";
+
+$headsubmit = "\
+</ol>\n<hr>\n
+<a name=submit> </a>\n
+<h3>Submitted journal papers</h3>\n
+(Email \"fessler AT umich DOT edu\" for preprints)\n
+$olr\n";
+
+$headmythesis = "\
+</ol>\n<hr>\n
+<h3>Dissertation</h3>\n
+$olr\n";
+
+$headsoftware = "\
+</ol>\n<hr>\n
+<h3>Software</h3>\n
+$olr\n";
+
+$headarxiv = "\
+</ol>\n<hr>\n
+<h3>ARXIV papers</h3>\n
+$olr\n";
+
+
+foreach $file (@ARGV) {
+	open(Bfile, $file) || die "Cannot open '$file'\n";
+
+	while (<Bfile>) {
+		chop;
+#		print "`$_'\n";
+
+		if ($_ eq "#full\n")	{ print $headfull; next; }
+		if ($_ eq "#abandon\n")	{ print $headabandon; next; }
+		if ($_ eq "#short\n")	{ print $headshort; next; }
+		if ($_ eq "#inpress\n") { print $headinpress; next; }
+		if ($_ eq "#reject\n")	{ print $headreject; next; }
+		if ($_ eq "#submit\n")	{ print $headsubmit; next; }
+		if ($_ eq "#mythesis\n") { print $headmythesis; next; }
+		if ($_ eq "#software\n") { print $headsoftware; next; }
+		if (/^#arxiv,/) { print $headarxiv; next; }
+
+		next if /^#/;		# skip comment lines
+
+		s/\$ftp/$ftp/g;		# put ftp url in
+		s/\$talk/$talk/g;	# put ftp/talk url in
+
+		($cite, $author, $title, @extra) = split(/\n/); # input lines
+		($type, $code, $line1) = $cite =~ /(\S+)\s+(\S+)\s+(.*)/;
+		die "cite=$cite?" unless defined($code) && defined($line1);
+
+		$author =~ s/  /, /g;		# commas between authors
+		$author =~ s/\\v\{g\}/g/g;	# \v{g} -> g
+
+		undef $address;
+		undef $booktitle;
+		undef $dept;
+#		undef $edition;
+		undef $editor;
+		undef $errata;
+		undef $html;
+		undef $web;
+		undef $journal;
+		undef $month;
+		undef $note;
+		undef $number;
+		undef $pages;
+		undef $pmc_link;
+		undef $publisher;
+		undef $school;
+		undef $year;
+#		undef $abs;
+		undef $url;
+
+		if (@extra) {
+			@_ = @extra;	# split by newlines by now
+
+		    while ($_ = shift(@_)) {
+
+			next if /^#/; # skip comments
+
+			die "Extra: $_\n" if !(/^@/);
+
+			($key, $rest) = /@(\w+)\s*(.*)/;
+			die "key in='$_'" unless defined($key);
+			$key = "errata" if ($key eq "errat");
+
+			if ($key eq "u") # @u
+			{
+				die "empty url '$_'\n@_\n" if !defined($rest);
+				$url = &u2url($rest);
+				next;
+			}
+
+			if ($key eq "doi") # @doi
+			{
+				die "empty doi '$_'\n@_\n" if !defined($rest);
+				$url = &u2url("doi $rest");
+			#	print "$url\n"; exit(-1);
+				next;
+			}
+
+			if ($key eq "pm") { # @pm
+				die "empty pm '$_'\n@_\n" if !defined($rest);
+				$pmc_id = $rest;
+				$pmc_link = $pmc_root . $pmc_id;
+				next;
+			}
+
+			if ($key eq "h") { # @h formerly @html
+				die "empty html '$_'\n@_\n" if !defined($rest);
+				$html = $rest;
+				next;
+			}
+
+			if ($key eq "w" || $key eq "web") { # @w @web
+				die "empty web '$_'\n@_\n" if !defined($rest);
+				$web = &u2url($rest);
+				next;
+			}
+
+			$multiline =
+				$key eq "abs" ||
+				$key eq "an" ||
+				$key eq "errata" ||
+				$key eq "note";
+
+			if (!$multiline) {
+				die "need rest $key" unless defined($rest);
+				next;
+			}
+
+			# make sure that there is something on this line
+			# or on the next line
+			$next = "@_";
+			$next = $next && !($next eq "") && !($next =~ /^@/);
+			die "empty entry '$_'\n@_\n"
+				if (!defined($rest) && !$next);
+
+			#
+			# start assembling "errata" or "note"
+			# ignore anything else
+			#
+			if ($rest) {
+				$errata = $rest	if ($key eq "errata");
+				$note = $rest	if ($key eq "note");
+			}
+			else {
+				$errata = "";
+			}
+
+			next unless $next;	# done with one liners
+
+			#
+			# at this point we are parsing multiline
+			# errata or notes (or abs or an which we ignore)
+			# parse until next line starts with @ (or end)
+			#
+			@work = @_;
+			while ($_ = shift(@work)) {
+				next if /^#/;
+				last if /^@/;
+				$note = $note . "\n" . $_ if ($key eq "note");
+				$errata = $errata . "\n" . $_ if ($key eq "errata");
+
+				shift(@_);
+			}
+
+		    }
+		}
+
+		# begin printing
+		print "\n<li>\n";
+		print "\<a name=\"$code\"\>\n";
+		print "$author.\<\/a\><br>";
+		$yesurl = defined($url) && ($url ne '?');
+		if ($yesurl)
+		{
+			print "\n";
+			$_ = $url;
+			if (!/https:/ && !/http:/ && !/ftp:/) {
+				print "<a href=\"$ftp/$url\">\n";
+			} else {
+				print "<a href=\"$url\">\n";
+			}
+		}
+		else {
+			print "<u>\n";
+		}
+
+		if ($yesurl) {
+			print "$title.</a>\n";
+		}
+		else {
+			print "$title.</u>\n";
+		}
+
+#		@line1 = split(/  /, $line1);
+		#
+		# split line1 into chunks in {}'s or space delimited
+		#
+		@line1 = ();	# start with empty list
+		$_ = $line1;
+		while (/\s+/)
+		{
+			if (/^{/)
+			{
+				if (/^{[^}]*{/) {	# nested braces
+					($chunk, $_) = /(^{[^}]*}[^}]*})\s+(.*)/;
+				} else {		# no nested
+					($chunk, $_) = /(^{[^}]*})\s+(.*)/;
+				}
+				die "{}'s in `$_'?" unless defined($_);
+			} else {
+				($chunk, $_) = /(\S+)\s+(.*)/;
+			}
+			@line1 = (@line1, $chunk);
+		}
+		@line1 = (@line1, $_);	# last chunk
+
+		#
+		# Get required stuff from line1
+		#
+		if ($type eq '@a') {
+			($journal, $volume, $number, $pages, $month, $year) = @line1;
+			die "bug" unless defined($year);
+
+			$journal = $Abbr{$journal} if defined($Abbr{$journal});
+			$journal =~ s/[{}]//g;
+			if (defined($web)) {
+				print "<br><em><a href=\"$web\"> $journal</a></em>";
+				undef $web;
+			} else {
+				print "<br><em>$journal</em>";
+			}
+
+			# capitalize first letter of month
+			$month = "" if ($month eq ".");
+			if ($month)
+			{
+				($m1, @mo) = split(//, $month);
+				$m1 =~ tr/a-z/A-Z/;
+				$month = "$m1 @mo";
+				$month =~ s/ //g;
+				if ($month eq "May") {
+					$month = "$month ";
+				} else {
+					$month = "$month. ";
+				}
+			}
+
+#			print "`$volume($number):$pages'\n";
+			print ", $volume" unless ($volume =~ /(\?|\.)/);
+			print "($number)" unless ($number =~ /(\?|\.)/);
+			print ":$pages" unless ($pages =~ /(\?|\.)/);
+			print ", ";
+			print "$month" unless ($month eq "?" || $month eq ".");
+			print "$year.\n";
+			print "$note\n" if defined($note);
+		}
+
+		elsif ($type eq '@b') {
+			($publisher, $address, $year) = @line1;
+			next;
+#			die "not done $type";
+		}
+
+		elsif ($type eq '@c') {
+			($booktitle, $volume, $pages, $year) = @line1;
+			$booktitle = $Abbr{$booktitle} if defined($Abbr{$booktitle});
+			$booktitle =~ s/[{}]//g;
+			if (defined($web)) {
+				print "<br><em><a href=\"$web\"> $booktitle</a>, </em>\n";
+				undef $web;
+			} else {
+				print "<br><em> $booktitle, </em>\n";
+			}
+			print "vol. $volume, "
+				if (defined($volume) && ($volume !~ /(\?|\.)/));
+			if (defined($pages) && ($pages !~ /(\?|\.)/)) {
+				if ($pages =~ /-/) {
+					print "pp. $pages, ";
+				} else {
+					print "p. $pages, ";
+				}
+			}
+			print "$year.\n";
+			print "$note\n" if defined($note);
+		}
+
+		elsif ($type eq '@d') {
+			($school, $address, $month, $year) = @line1;
+			if ($school eq 'um') {
+				print "UM, ";
+			} else {
+				$school = "$Abbr{$school}" if (defined($Abbr{$school}));
+				$school =~ s/[\}\{]//g; # remove braces
+				print "$school, ";
+			}
+			if (0 && $month && !($month eq "?")) { # nah
+				($m1, @mo) = split(//, $month);
+				$m1 =~ tr/a-z/A-Z/;
+				$month = join('', ($m1, @mo, '. '));
+				print "$month $year\n";
+			}
+			else {
+				print "$year\n";
+			}
+		}
+
+		elsif ($type eq '@i') {
+			($booktitle, $editor, $publisher, $address, $pages, $year) = @line1;
+			if (defined($Abbr{$booktitle})) {
+				print "<br><em> $Abbr{$booktitle}, </em>\n";
+			} else {
+				print "<br><em> $booktitle, </em>\n";
+			}
+			if ($month) {
+				($m1, @mo) = split(//, $month);
+				$m1 =~ tr/a-z/A-Z/;
+				$month = join('', ($m1, @mo, '. '));
+			}
+			$editor =~ s/[{}]//g;
+			$publisher =~ s/[{}]//g;
+			$address =~ s/[{}]//g;
+			print "$editor, editor.\n";
+			print "$publisher, $address,\n";
+			print "pp. $pages, $year.\n";
+		}
+
+		elsif ($type eq '@m') {
+			($year) = @line1;
+			print "<br>\n$note, " if defined($note);
+			print "$year\n";
+		}
+
+		elsif ($type eq '@r') {
+			($number, $dept, $address, $month, $year) = @line1;
+
+			$dept = $Abbr{$dept} if defined $Abbr{$dept};
+			$address = $Abbr{$address} if defined $Abbr{$address};
+			if ($month) {
+				($m1, @mo) = split(//, $month);
+				$m1 =~ tr/a-z/A-Z/;
+				$month = join('', ($m1, @mo, '. '));
+			}
+			$line = "<br><em> Technical Report $number, </em>\n";
+			$line = "$line$dept, $address,\n$month$year.\n";
+			$line =~ s/[{}]//g;
+			print "$line";
+		}
+
+		else {
+			print "Bad record: @_\n";
+			die "Unknown type $type";
+		}
+
+		if (defined($html)) {
+#			$html =~ s/\$ftp/$ftp/;
+			print "$html\n";
+		}
+
+		if (defined($web)) {
+			print "<a href=\"$web\"> (Online version)</a>\n";
+		}
+
+		if (defined($pmc_link)) {
+			print " (PubMed <a href=\"$pmc_link\"> $pmc_id</a>)\n";
+		}
+
+		print "<br>Errata: $errata\n"
+			if defined($errata) && ($errata ne "");
+	}
+
+	close(Bfile);
+}
+
+print "\
+</ol>\n<hr>\n
+<a href=\"http://www.eecs.umich.edu/~fessler\">\n
+Back to Fessler home page</a>\n";

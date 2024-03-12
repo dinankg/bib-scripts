@@ -1,0 +1,84 @@
+#!/usr/bin/perl -w
+# medphys2 vol num mon year jour
+# convert medphys table of contents to my .b format
+
+($vol, $num, $mon, $year, $jour) = (@ARGV);
+die "args" unless defined($jour);
+
+$cite0 = "\@a xxxxxx $jour $vol $num pppppp $mon $year";
+
+#$yr = $year =~ s/\d\d(..)/$1/;
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/tolower.pl';
+require $home . '/l/src/script/bib/author.pl';
+require $home . '/l/src/script/bib/bibkey.pl';
+require $home . '/l/src/script/bib/htmlaccent.pl';
+
+#$/ = "\n\n";
+$/ = "<P>"; # slurp paragraph at time
+
+while (<STDIN>) {
+	next if /Medical Physics\s*--/;
+#	next unless //;
+
+	next if /Reviewer/;
+	next if /<H3>/;
+
+#	print "`$_'\n";
+
+	s/^(.|\n)*<strong>//;	# title surrounded by <strong>TITLE</strong><br>
+	s/<\/strong><br>\s*/\n/i;
+	s/<BR>\s*/\n/i;		# author ends with <BR>
+	s/<br>(.|\n)*/\n/i;	# pages end with <br>
+
+	$_ = &htmlaccent($_);	# convert html accents
+
+	s/<[^>]+>//g;		# strip remaining html junk
+
+	@all = split(/\n/);
+	$nline = $#all + 1;
+
+	if ($nline == 3) {
+		$title = "$all[0]";
+		$auth = "$all[1]";
+		$pages = "$all[2]";
+	}
+	else {
+		print STDERR "skipping bad entry\n`$_'\n";
+		next;
+	}
+
+	$pages =~ s/^p*\. //;	# kill pp. or p.
+
+	# see if title is 'RADIATION THERAPY PHYSICS: "blah"'
+	if ($title =~ /^(Ph\.D\. )?[A-Z \-\.\:\/]*\"/) {
+		$title =~ s/^(Ph\.D\. )//;
+		$title =~ s/^[A-Z \-\.\:\/]*\"(.*)\"$/$1/;
+	}
+
+	if ($auth eq "") {
+		print STDERR "skipping empty author\n`$_'\n";
+		next;
+	}
+
+	$auth = &author($auth);
+
+	$fakeb2 = "$cite0\n$auth\n$title\n";
+	@bibkey = &bibkey($fakeb2); 
+	($author, $yr, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$yr:$code";
+
+	$cite = $cite0;
+	$cite =~ s/xxxxxx/$key/;
+	$cite =~ s/pppppp/$pages/;
+
+#	if ($erratum) {
+#		$annote = "\@an erratum\n";
+#	} else {
+		$annote = "";
+#	}
+
+	print "$cite\n$auth\n$title\n$annote\n";
+}

@@ -1,0 +1,40 @@
+#!/bin/csh
+# bbl-ab
+# make abbreviations for .bbl file
+
+set file = $1
+set root = `basename $file`
+set t = `basename $root .bbl`.bbl
+if ($root != $t) then
+	echo "file=$file with root=$root not ending in .bbl"
+	exit
+endif
+
+sed	\
+	-e 's/January/Jan./g' \
+	-e 's/February/Feb./g' \
+	-e 's/March/Mar./g' \
+	-e 's/April/Apr./g' \
+	-e 's/August/Aug./g' \
+	-e 's/September/Sept./g' \
+	-e 's/October/Oct./g' \
+	-e 's/November/Nov./g' \
+	-e 's/December/Dec./g' \
+	-e 's/pages/pp./g' \
+	-e 's/ volume/ vol./g' \
+	< $file > tmp-$$.bbl
+#	-e 's/\([A-Z]\) /\1. /g'
+#	 J A Fess to JA Fess
+#	-e 's/^\([A-Z]\)\~\([A-Z]\) /\1\2 /g' \
+#	-e 's/ \([A-Z]\)\~\([A-Z]\) / \1\2 /g' \
+#	-e 's/^\([A-Z]\)\~\([A-Z]\) /\1.\~\2. /g' \
+#	-e 's/^\([A-Z]\)\~\([A-Z]\)/\1.\~\2/g' \
+#	-e 's/ \([A-Z]\)\~\([A-Z]\) / \1.\~\2. /g' \
+#	-e 's/ \([A-Z]\)\~\([A-Z]\)/ \1.\~\2/g' \
+
+if (-e tmp-$$.bbl) then
+	echo replacing $file with abbreviated version
+	/bin/mv tmp-$$.bbl $file
+else
+	echo error happened
+endif

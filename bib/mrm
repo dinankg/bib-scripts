@@ -1,0 +1,28 @@
+#!/bin/csh -e
+# mrm
+# open web page to MRM or JMRI journal volume
+
+if ($#argv < 2) then
+	echo "Usage: $0 vol num"
+	exit -1
+endif
+
+set jour = `basename $0` # mrm or jmri
+set vol = $1
+set num = $2
+
+#set year = `date +%Y`
+#set dir = "~/l/tex/biblio/jour/wiley/$jour/issues"
+#set issue = `grep " $vol $num " $dir/* | sed 's/:/ /' | awk '{print $2}'`
+#set url = 'http://www3.interscience.wiley.com/cgi-bin/issuetoc?ID='$issue
+#set url = 'http://www3.interscience.wiley.com.proxy.lib.umich.edu/cgi-bin/issuetoc?ID='$issue
+#set url = 'http://proxy.lib.umich.edu/login\\?url=http://www3.interscience.wiley.com/cgi-bin/issuetoc?ID='$issue
+
+# new version uses issue doi
+set url = 'http://proxy.lib.umich.edu/login?url=http://doi.org/10.1002/'$jour'.v'$vol':'$num
+
+# doi.org lags wiley so use wiley:
+set url = 'http://proxy.lib.umich.edu/login?url=http://onlinelibrary.wiley.com/doi/10.1002/'$jour'.v'$vol'.'$num'/issuetoc'
+
+echo "$url"
+open "$url"

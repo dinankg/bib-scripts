@@ -1,0 +1,27 @@
+#!/bin/csh -e
+#	do,finish
+#	finish converting pmb temporary files to my format files 
+
+set yr_start = 1956
+set yr_end = 2002
+#set yr_start = 1990
+#set yr_end = $yr_start
+
+set yr = $yr_start
+while ($yr <= $yr_end)
+	foreach issue (issue/$yr/*)
+		set dir = issue/$yr
+		set out = `echo $issue | sed -e 's:issue/::'`
+
+		if !(-d $yr) mkdir $yr
+
+		if !(-e $out) then
+			echo "doing $out"
+			hb,pmb,finish $issue > $out
+		else
+			echo "$out already done"
+		endif
+	end
+
+	@ yr += 1
+end

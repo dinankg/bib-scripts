@@ -1,0 +1,8 @@
+#!/bin/csh -e
+# author-test
+# test author and author.pl
+
+echo test1
+author 0 < author-test.1 | author-pair
+echo test2
+author 0 < author-test.2 | author-pair

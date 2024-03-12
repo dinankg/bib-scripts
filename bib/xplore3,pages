@@ -1,0 +1,22 @@
+#!/usr/bin/perl -w
+# xplore3,pages
+# count number of continuation pages
+
+# if none, then a single: ResultStart=0">
+# if more, then (twice as many) page=1&ResultStart=25 ...
+
+undef $/; # slurp entire file
+$_ = <STDIN>;
+
+if (!/page=1&ResultStart=25/) {
+	print "0"; # 0 continuation pages
+	exit 0;
+}
+
+@lines = split(/ResultStart=/);
+$npage = ($#lines - 1) / 2;
+print "$npage";	# of continuation pages
+
+# x2.0 shows page links at top and bottom (so there are twice as many)
+
+# problem: if too many pages, then xplore uses "Next >"

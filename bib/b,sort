@@ -1,0 +1,14 @@
+#!/bin/csh -e
+# b,sort
+# sort the entries in a .b file: year slowest, key fastest
+
+set com = `echo $0`
+set dir = `dirname "$com"`
+# echo $dir
+
+if ($#argv < 1) then
+	echo "usage $0 -page file(s)"
+exit -1
+endif
+
+jl $dir/b,sort.jl $*

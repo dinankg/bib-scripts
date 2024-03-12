@@ -1,0 +1,14 @@
+#!/usr/bin/perl -w
+# author
+# reformat author names into my .b format using author.pl
+# Jeff Fessler
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/author.pl';
+
+# for each line...
+while (<>) {
+	$_ = &author($_);
+	s/\s+$//;	# trailing spaces
+	print "$_\n";
+}

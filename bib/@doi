@@ -1,0 +1,25 @@
+#!/bin/csh
+# @doi doi
+# open doi
+
+if ($#argv < 1) then
+	echo "Usage: $0 type args"
+	exit -1
+endif
+
+set brow_arg = ""
+
+if (`uname` == Darwin) then
+	alias open "/usr/bin/open $brow_arg" # mac
+else
+	alias open "firefox" # for linux systems
+endif
+
+if ($#argv >= 2) then
+	echo "https://doi.org/"$1
+	exit
+endif
+
+open "https://proxy.lib.umich.edu/login?url=http://doi.org/"$1
+
+exit 0

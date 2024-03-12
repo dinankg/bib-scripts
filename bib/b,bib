@@ -1,0 +1,828 @@
+#!/usr/bin/perl -w
+# b,bib
+# convert my .b file format into BibTeX .bib file format
+# also converts to other formats like the tagged (RIS?) format used by endnote
+#
+# for my .b format, each entry in line1 can be
+#	{anything but right brace} | ? | . | [0-9a-zA-Z-]
+# The author names must be separated by double spaces.
+# ", " separation also allowed, as long as no {}'s present in author list (?)
+#
+# comment blocks can be surrounded by #- and #+ or #{ and #}
+
+die "no home" unless defined($ENV{HOME});
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/at_u.pl';
+$dirbib = "$home/l/tex/biblio/bib";
+
+$Usage = "b,bib [optional arguments]:
+	-b		-abs -annote -comment -errata -html -url -abbrev
+			(for lossless conversion)
+	-abs		print abstracts
+	-annote		print annotations
+	-comment	print comment lines (those beginning with #)
+	-errata		print errata
+	-html		print html
+	-url		print url as is
+	-pmcnote	nih pmcid in note
+	-link		print url in link form
+	-abbrev		leave titles as abbreviations
+	-nobrace	no braces around title strings, journal abbrev, ...
+	-tagged		print in tagged format (for Word / EndNote users)
+\n";
+
+if ($#ARGV == -1)
+{
+	die("Usage: $Usage");
+}
+
+# defaults for optional stuff
+$tagged = 0;			# don't printed in tagged format
+$keepabbrev = 0;		# don't keep abbreviations, expand them
+#$Parxiv_note = 1;		# print "arxiv url" as a "note"
+$Parxiv_as_url_if_only = 1;	# print "arxiv" as "url" if no other url (todo)
+$Pannote = 0;			# don't print annotations
+$Pabs = 0;			# don't print multi-line abstracts
+$Pcomment = 0;			# don't print comments
+$Perrata = 0;			# don't print multi-line @errat
+$Pweb = 0;			# don't print web line
+$Phtml = 0;			# don't print html
+$Pnote = 1;			# do print notes!
+$Purl = 0;			# don't print url in raw form
+$Plink = 0;			# don't print url in link form
+$Ppmcnote = 0;			# don't put pmcid in note
+$brace_btitle = 2;		# put braces around cap'd words
+$brace_journal = 2;		# put braces around journal name
+#$brace_btitle = 1;		# put braces around proceeding name
+$brace_author = 1;		# put braces around author names with \u{v} etc.
+$init_author = 1;		# compress authors to initials
+
+%EntryType = (	'@a', 'ARTICLE',
+		'@b', 'BOOK',
+		'@c', 'CONFERENCE',
+		'@d', 'PHDTHESIS',
+		'@i', 'INCOLLECTION',
+		'@m', 'MISC',
+#		'@p', 'PROCEEDINGS',
+		'@r', 'TECHREPORT');
+
+# these are the types of references used by EndNote
+%EndNoteType = (
+	'@a', 'Journal Article',
+	'@b', 'Book',
+	'@c', 'Conference Proceedings',
+	'@d', 'Thesis',
+	'@i', 'Book Section',
+	'@m', 'Generic',
+	'@p', 'Conference Proceedings',
+	'@r', 'Report'
+	);
+
+
+# read abbreviations into associative array
+if (!$keepabbrev)
+{
+	$file = "$dirbib/abbrev.bib";
+	open(Afile, $file) || die "Cannot open '$file'\n";
+	while (<Afile>)
+	{
+		next unless /=/; # skip blank lines (without "=")
+		s/ &/ \\&/; # & to \& for latex
+		($abbr, $long) = /\@string\{(\S+)\s+=\s*"(.*)"\}/;
+		die "abbrev problem `$_'" unless defined($long);
+#		print "abbr='$abbr' long='$long'\n"; # debugging
+		$Abbr{$abbr} = $long;
+	}
+	close(Afile);
+
+	$file = "$dirbib/spie.txt";
+	open(Afile, $file) || die "Cannot open '$file'\n";
+	while (<Afile>)
+	{
+		next unless /\t/; # skip blank lines (without tab)
+		s/ &/ \\&/; # & to \& for latex
+		($abbr, $long) = /(\S+)\s+(.*)/;
+		die "abbrev problem `$_'" unless defined($long);
+		$abbr_spie = "spie-$abbr";
+#		print "abbr='$abbr' long='$long'\n"; # debugging
+		$Abbr{$abbr_spie} = "Proc. SPIE $abbr $long";
+	}
+	close(Afile);
+#	exit;
+}
+
+
+# read name accent pairs into associative array
+#
+if (1)
+{
+	$file = "$dirbib/jf-names.txt";
+	open(Afile, $file) || die "Cannot open '$file'\n";
+	while (<Afile>)
+	{
+		next if /^%/; # skip comments
+		next if /^$/; # skip blank lines
+		($abbr, $full) = /(\S+)\s+(.*)/;
+		die "name problem `$_'" unless defined($full);
+	#	print "abbr='$abbr' full='$full'\n"; # debug
+		$NameTable{$abbr} = $full;
+	}
+	close(Afile);
+}
+
+
+$/ = "\n\n"; # slurp paragraph at time; trick: must be *after* reading abbrev!
+
+
+# make abbreviation substitution (and surround with braces)
+# or surround with "{}"
+#
+sub do_abbrev
+{
+	local($tmp) = $_[0];
+	local($add_braces) = $_[1];
+	if (defined($Abbr{$tmp}))
+	{
+		$tmp = "{$Abbr{$tmp}}";
+	}
+	elsif ($add_braces)
+	{
+		$tmp = "{" . $tmp . "}" unless $tmp =~ /^\{.*\}$/;
+	}
+
+	$tmp = "{" . $tmp . "}" if ($add_braces == 2); # 2016-07-09 for biblatex
+	return $tmp;
+}
+
+
+# make name substitution
+#
+sub do_name
+{
+	local($tmp) = $_[0];
+	$tmp =~ s/\\([A-Z])/$1/g; # todo: temporary shortcut
+if (0) # todo!!!!!!!!!!!
+{
+	if (defined($NameTable{$tmp}))
+	{
+		$tmp = "{$Abbr{$tmp}}";
+	}
+	elsif ($add_braces)
+	{
+		$tmp = "{" . $tmp . "}" unless $tmp =~ /^\{.*\}$/;
+	}
+}
+	return $tmp;
+}
+
+
+# loop over command line filenames
+#
+$firstfile = 1;
+foreach $file (@ARGV)
+{
+	# optional arguments
+	if ($file eq '-tagged')		{ $tagged = 1; next; }
+	if ($file eq '-abs')		{ $Pabs = 1; next; }
+	if ($file eq '-annote')		{ $Pannote = 1; next; }
+	if ($file eq '-comment')	{ $Pcomment = 1; next; }
+	if ($file eq '-errata')		{ $Perrata = 1; next; }
+	if ($file eq '-html')		{ $Phtml = 1; next; }
+	if ($file eq '-url')		{ $Purl = 1; next; }
+	if ($file eq '-link')		{ $Plink = 1; next; }
+	if ($file eq '-pmcnote')	{ $Ppmcnote = 1; next; }
+	if ($file eq '-web')		{ $Pweb = 1; next; }
+	if ($file eq '-nobrace') { $brace_btitle = 0; $brace_author = 0; next; }
+	if ($file eq '-abbrev')	{ $keepabbrev = 1; undef(%Abbr); next; }
+
+	if ($file eq "-b")
+	{
+		$Pabs = 1;
+		$Pannote = 1;
+		$Pcomment = 1;
+		$Perrata = 1;
+		$Phtml = 1;
+		$Purl = 1;
+		$Pweb = 1;
+		$keepabbrev = 1; undef(%Abbr);
+		$init_author = 0; # keep full authors
+		$brace_author = 0;
+#		$brace_journal = 0;
+#		$brace_btitle = 0;
+		next;
+	}
+
+#	print STDERR "$file\n";
+	die "cannot open file = `$file'" unless open(Bfile, $file);
+
+	print "\n" unless $firstfile; # extra newline for subsequent files
+	$firstfile = 0;
+
+	#
+	# loop over paragraphs in file
+	#
+	$skip_block = 0;
+	while (<Bfile>)
+	{
+		($nl_head) = /^(\n*)/; # grab leading newlines
+		($nl_tail) = /(\n+)$/; # grab trailing newlines
+		s/^\n+//;		# remove leading newlines
+		s/(\n+)$//;		# remove trailing newlines
+	#	$tmp1 = length($nl_head); $tmp2 = length($nl_tail);
+	#	print STDERR "head=$tmp1 tail=$tmp2 `$_'\n"; next;
+	#	print "`$nl_head`$_'$nl_tail'\n";	next;
+
+		if (/^\#\-/ | /^\#\{/) # start skipping comment block
+		{
+			print STDERR "comment block in comment block?\n"
+				if ($skip_block);
+			$skip_block = 1;
+			next;
+		}
+
+		if (/^\#\+/ | /^\#\}/) # stop skipping comment block
+		{
+			die "($file) stray comment end?" if (!$skip_block);
+			$skip_block = 0;
+			next;
+		}
+
+		next if $skip_block;
+
+		if (/^#/) # handle comment line(s) (can precede but not follow)
+		{
+			print "$nl_head" if $Pcomment;
+
+			while (/^#/) # in case multiple comment lines
+			{
+#				($comment, $rest) = /(^#[^\n].*\n)(.*)/;
+				($comment, @rest) = split(/\n/);
+				$rest = join("\n", @rest);
+#				print "`$comment' `@rest'\n";
+
+				print "$comment" if $Pcomment;
+
+				if (defined($rest))
+				{
+					$_ = $rest;
+				}
+				else
+				{
+					$_ = "";
+					next;
+				}
+			}
+
+			if ($Pcomment)
+			{
+				print "$_$nl_tail";
+				next;
+			}
+
+			next if /^$/;
+		}
+
+#		print "`$_'\n"; exit;
+
+		print $nl_head if $nl_head; # preserve blank lines
+
+		($cite, $author, $title, @extra) = split(/\n/); # input lines
+		die "($file) no title in `$_'?" unless defined($title);
+		($itype, $code, $line1) = $cite =~ /(\S+)\s+(\S+)\s+(.*)/;
+
+		die "($file) no code in `$cite'?" unless defined($code);
+
+		$code =~ s/^\!//; # remove leading "!" in code if present
+
+		# check for repeated "code"
+		print STDERR "Repeat code '$code' in '$File{$code}' '$file'\n"
+			if defined($File{$code});
+		$File{$code} = $file; # store file for this code
+
+		#
+		# split line1 into chunks in {}'s or space delimited
+		#
+		@line1 = (); # start with empty list
+		$_ = $line1;
+		while (/\s+/)
+		{
+			if (/^{/)
+				# } <- for matching
+				{
+				if (/^{[^}]*{/)
+					# } <- for matching
+				{ # nested braces
+					# {{{ <- for matching
+					($chunk, $_) = /(^{[^}]*}[^}]*})\s+(.*)/;
+				}
+				else # no nested
+				{
+					# { <- for matching
+					($chunk, $_) = /(^{[^}]*})\s+(.*)/;
+				}
+				die "($file) {}'s in `$_'?" unless defined($_);
+			}
+			else
+			{
+				($chunk, $_) = /(\S+)\s+(.*)/;
+			}
+			@line1 = (@line1, $chunk);
+		}
+		@line1 = (@line1, $_); # last chunk
+
+
+		$author =~ s/, /  /g unless $author =~ /[{}]/;
+			# replace ', ' with '  ' (if any) unless {}'s present
+		$author =~ s/  / and /g;
+#		$author =~ s/([A-Z]) /$1. /g; # put . after initials
+		if ($brace_author) # {} around \~ etc.
+		{
+			$author =~ s/ (\w*\\[^ ]*)/ {$1}/g;
+		}
+
+		#
+		# abbreviate first and middle names to save space:
+		# Jeffrey A Fessler -> J. A. Fessler
+		#
+		if ($init_author)
+		{
+#			$author_save = $author;
+			@_ = split(" and ", $author);
+			$author = "";
+			while ($_ = shift(@_))
+			{
+				$author = $author . " and ";
+				while (/ /)
+				{
+					($first, $_) = /([^ ]*) (.*)/;
+					die "($file) rest `$_'" unless defined($_);
+
+#					print "first = `$first'\n";
+
+					# do not mess with braces
+					if ($first =~ /[{}]/)
+					{
+						$_ = $first . " " . "$_";
+						last;
+					} else # abbreviate! Chun-yu -> C.
+					{
+						# note utf8 here!
+						$first =~ s/([a-zãâäáçéèëğíïñóü\\\'\"\`\^]|\-[a-z])//g;
+	die "($file) bad `$first' in `$code'" if ($first =~ /[^A-Z\-]/);
+						$author = $author . "$first. ";
+					}
+				}
+				$author = $author . "$_";
+			}
+			$author =~ s/^ and //; # kill extra "and"
+#			die "($file) bad `$author' `$author_save'" if ($author ne $author_save);
+		}
+
+		$author = &do_name($author);
+
+		#
+		# surround words in title with caps with {}.
+		#
+		if ($brace_btitle)
+		{
+#			$title =~ s/^(.[^ ]*[A-Z][^ ]*) /{$1} /; # first word
+#			$title =~ s/ ([^ ]*[A-Z][^ ]*)/ {$1}/g;
+			# 2015-07-12 also put braces around "math" like $l_0$
+			$title =~ s/^(.[^ ]*[A-Z\$\_][^ ]*) /{$1} /; # first word
+			$title =~ s/ ([^ ]*[A-Z\$\_][^ ]*)/ {$1}/g;
+			$title =~ s/ &/ \\&/g; # & to \& for latex
+		}
+
+		$itype =~ s/,\S+$//; # remove any qualifiers after type
+
+		die "($file) Unknown type `$itype' in `$cite'"
+			unless defined($EntryType{$itype});
+		$type = $EntryType{$itype};
+
+#		undef	$abs;
+		undef	$address;
+		undef	$booktitle;
+#		undef	$edition;
+		undef	$editor;
+		undef	$institute;
+		undef	$journal;
+		undef	$month;
+#		undef	$note;
+		undef	$number;
+		undef	$pages;
+		undef	$publisher;
+		undef	$school;
+#		undef	$series;
+		undef	$volume;
+		undef	$year;
+
+		#
+		# Get required entries from line1
+		#
+		if ($itype eq '@a')
+		{
+			($journal, $volume, $number, $pages, $month, $year, $extra) = @line1;
+			die "($file) bad \@a $code @line1" unless defined($year);
+			die "($file) bad \@a $code @line1" if defined($extra);
+			$journal = &do_abbrev($journal, $brace_journal);
+			$journal =~ s/ &/ \\&/; # & to \& for latex
+			$volume = "{$volume}" if ($volume =~ /\D/); # bracify
+			$number = "{$number}" if ($number =~ /\D/); # bracify
+			$pages = "{$pages}" if ($pages =~ /\D/); # bracify
+			undef $number if ($number eq "{?}");
+		}
+
+		elsif ($itype eq '@b')
+		{
+			($publisher, $address, $year, $junk) = @line1;
+			die "($file) bad \@b $code @line1" unless defined($year);
+			die "($file) bad \@b $code @line1" if defined($junk);
+			$publisher = &do_abbrev($publisher, 1);
+			$address = &do_abbrev($address, 1);
+		}
+
+		elsif ($itype eq '@c')
+		{
+			($booktitle, $volume, $pages, $year, $junk) = @line1;
+			die "($file) bad \@c $code @line1" unless defined($year);
+			die "($file) bad \@c $code @line1" if defined($junk);
+			$booktitle =~ s/ &/ \\&/; # & to \& for latex
+			$booktitle = &do_abbrev($booktitle, $brace_btitle);
+			$volume = "{$volume}" if ($volume =~ /\D/); # bracify
+			$pages = "{$pages}" if ($pages =~ /\D/); # bracify
+			undef $volume if ($volume eq "{?}");
+		}
+
+		elsif ($itype eq '@d')
+		{
+			($school, $address, $month, $year) = @line1;
+			die "($file) bad \@d $code @line1" unless defined($year);
+			$school = &do_abbrev($school, 1);
+			$address = &do_abbrev($address, 1);
+		}
+
+		elsif ($itype eq '@i')
+		{
+			($booktitle, $editor, $publisher, $address, $pages, $year) = @line1;
+			die "($file) bad \@i $code @line1" unless defined($year);
+			$booktitle = &do_abbrev($booktitle, $brace_btitle);
+			$publisher = &do_abbrev($publisher, 1);
+			$address = &do_abbrev($address, 1);
+			$editor =~ s/  / and /g;
+		}
+
+		elsif ($itype eq '@m')
+		{
+			($year, $junk) = @line1;
+			die "($file) bad \@m $code @line1" if defined($junk);
+		}
+
+		elsif ($itype eq '@p')
+		{
+			($publisher, $address, $year) = @line1;
+			die "($file) \@p not supported?\n";
+		}
+
+		elsif ($itype eq '@r')
+		{
+			($number, $institute, $address, $month, $year) = @line1;
+			die "($file) bad \@r $code @line1" unless defined($year);
+			$institute = &do_abbrev($institute, 1);
+			$address = &do_abbrev($address, 1);
+			$number = "{$number}" if ($number =~ /\D/); # bracify
+			undef $number if ($number eq "{?}");
+		}
+
+		else
+		{
+			print "Bad record: @_\n";
+			die "($file) Unknown type $itype";
+		}
+
+
+		#
+		# optional: print tagged format
+		#
+		if ($tagged)
+		{
+		#	$tag_author = "AU  -";
+			$tag_author = "\%A";
+		#	$tag_title = "TI  -";
+			$tag_title = "\%T";
+		#	$tag_source = "SO  -";
+		#	$tag_source = "\%Z"; # no, this is for "notes"
+			$tag_source = "\%J"; # this is for "journal"
+
+			print "\%0 $EndNoteType{$itype}\n";
+
+			@_ = split(" and ", $author);
+			while ($_ = shift(@_))
+			{
+				print "$tag_author $_\n";
+			}
+			$title =~ s/[{}]//g;
+			print "$tag_title $title\n";
+
+			if (defined($pages)) { $pages =~ s/[{}]//g; }
+
+			if ($itype eq '@a')
+			{
+				$journal =~ s/[{}]//g;
+				print "$tag_source $journal\n";
+				print "\%V $volume\n" if defined($volume);
+				print "\%N $number\n" if defined($number);
+				print "\%P $pages\n" if defined($pages);
+#				if (defined($volume)) {
+#					$vol = $volume;
+#					$vol = "$vol($number)" if defined($number);
+#					print "$vol:$pages";
+#				} else {
+#					print "submitted";
+#				}
+			}
+
+			elsif ($itype eq '@c')
+			{
+				$booktitle =~ s/[{}]//g;
+#				print "SO  - $booktitle $year;$pages";
+				print "\%B $booktitle\n";
+				print "\%P $pages\n" if defined($pages);
+			}
+
+			elsif ($itype eq '@b')
+			{
+				$publisher =~ s/[{}]//g;
+				$address =~ s/[{}]//g;
+				print "\%I $publisher\n";
+				print "\%C $address\n";
+#				print "SO  - $publisher $year";
+			}
+
+			elsif ($itype eq '@i')
+			{
+				print "\%B $booktitle\n";
+				print "\%E $editor\n";
+				print "\%I $publisher\n";
+				print "\%C $address\n";
+				print "\%P $pages\n";
+			}
+
+			elsif ($itype eq '@d')
+			{
+#				print "SO  - $school, $number, $year";
+				print "\%C $school, $address\n";
+			}
+
+			elsif ($itype eq '@r')
+			{
+#				print "SO  - $institute, $number, $year";
+				print "\%C $institute, $address\n";
+				print "\%N $number\n" if defined($number);
+			}
+
+			elsif ($itype eq '@m')
+			{
+#				print "SO  - $note $year";
+#				print "\%Z $note\n";
+			}
+
+			else
+			{
+				die "($file) unknown type $itype";
+			}
+			print "\%D $year\n";
+
+			print "\n";
+			next;
+		}
+
+
+		#
+		# Print .bib record
+		#
+		print "\@$type\{"; # "\}" <- just for vi matching
+		print "$code,\n";
+		if ($itype eq '@p')
+		{
+			print	" editor = \{$author\},\n";
+		}
+		else
+		{
+			print	" author = \{$author\},\n";
+		}
+		print	" title = \{$title\},\n";
+		print	" journal = $journal,\n"	if ($journal);
+		print	" booktitle = $booktitle,\n"	if ($booktitle);
+		print	" volume = $volume,\n"
+			if defined($volume) && ($volume !~ /(\?|\.)/);
+		print	" number = $number,\n"
+			if defined($number) && ($number !~ /(\?|\.)/);
+		print	" editor = $editor,\n"
+			if defined($editor)
+				&& ($editor !~ /^\{?(\?|\.)/);
+		print	" institution = $institute,\n"
+			if defined($institute)
+				&& ($institute !~ /^\{?(\?|\.)/);
+		print	" publisher = $publisher,\n"	if ($publisher);
+		print	" school = $school,\n"	if ($school);
+		print	" address = $address,\n"
+			if defined($address)
+				&& ($address !~ /^\{?(\?|\.)/);
+
+		if (defined($pages) && ($pages !~/(\?|\.)/))
+		{
+			if ($pages =~ /[-A-Z]/)
+			{
+				$pages =~ s/-/--/;
+				print " pages = \{$pages\},\n";
+			} else
+			{
+				print " pages = $pages,\n";
+			}
+		}
+
+		print " month = $month,\n"
+			if (defined($month) && ($month !~ /(\?|\.)/));
+
+		# extra stuff:
+		#	@abs @an @arxiv @doi @errat @note {@u @url} @h {@w @web}
+		#	@h (formerly @html)
+		# each of these may be a single line or multiple lines
+		# but continuation lines may not begin with '@'
+		# so the "@" is important as a delimiter of these!
+
+		# for these we must defer until end to handle
+		undef $arxiv;
+		undef $doi;
+		undef $url;
+
+		$has_note = 0;
+	#	$has_url = 0;
+	#	$url_rest = '';
+		if (@extra)
+		{
+			@_ = @extra; # these are split by newlines by now
+
+		    while ($_ = shift(@_))
+		    {
+
+			die "($file) Extra: $_\n@_\n" if !($_ =~ /^@/);
+
+			($key, $rest) = /@(\w+)\s*(.*)/;
+			die "($file) key in='$_'" unless defined($key);
+
+			# convert from .b shorthand to bibtex key
+			# (some keys like 'note' do note need converted)
+			$key = "errata" if ($key eq "errat");
+			$key = "annote" if ($key eq "an");
+			$key = "url" if ($key eq "u"); # @u or @url
+			$key = "web" if ($key eq "w"); # @w or @web
+
+			die "($file) key in='$_'"
+				if ($key eq "a" || $key eq "c" || $key eq "m");
+
+			$has_note ||= ($key eq "note");
+		#	$has_url ||= ($key eq "url");
+
+			if ($key eq "arxiv")
+				{$arxiv = $rest; next;}
+			if ($key eq "doi")
+				{$doi = $rest; next;}
+			if ($key eq "url")
+				{$url = &u2url($rest); next;}
+
+			#
+			# possible multi-line cases:
+			#
+			$multiline = 0
+				|| $key eq "abs"
+			#	|| $key eq "arxiv" # not multiline, but special
+				|| $key eq "annote"
+				|| $key eq "errata"
+				|| $key eq "h" # @h formerly @html
+				|| $key eq "note"
+			#	|| $key eq "url" # not multiline, but special...
+				|| $key eq "web";
+
+			if (!$multiline)
+			{
+				die "($file) need rest $key" unless defined($rest);
+				$rest = "{$rest}" if ($rest =~ /\D/); # bracify
+				print " $key = $rest,\n";
+				next;
+			}
+
+		#	$url_rest = "{$rest}" if ($key eq "url");
+
+			$doprint = 0;
+			$doprint = 1 if ($Pabs && $key eq "abs");
+			$doprint = 1 if ($Pannote && $key eq "annote");
+			$doprint = 1 if ($Perrata && $key eq "errata");
+			$doprint = 1 if ($Phtml && $key eq "html");
+			$doprint = 1 if ($Pweb && $key eq "web");
+			$doprint = 1 if ($Pnote && $key eq "note");
+		#	$doprint = 1 if ($Purl && $key eq "url");
+
+			# make sure that there is something on this line
+			# or on the next line
+			$next = "@_";
+			$next = $next && !($next eq "") && !($next =~ /^@/);
+			die "($file) empty entry '$_'\n@_\n"
+				if (!defined($rest) && !$next);
+
+			if (0 && $Plink && $key eq "url") # expand url
+			{
+				$doprint = 1;
+				if ($rest =~ /doi /) # use doi as url
+				{
+					$key = "doi";
+					$rest =~ s/doi //;
+					$doi = $rest;
+					$doi =~ s/^#.*//;
+					next;
+				}
+				else {
+					$rest = &u2url($rest);
+				}
+			}
+
+			#
+			# start printing
+			#
+			if ($doprint)
+			{
+				# single-line cases
+				# these 'extras' will be surrounded by braces
+				if ($rest && !$next)
+				{
+					print " $key = {$rest},\n";
+					next;
+				}
+
+				# multi-line cases
+				# tricky issue: the stuff might start on the
+				# current line, or on the next line, but we
+				# cannot allow a blank line in the .bib entry
+#				print " $key = {\n"; # "#}"
+#				print "$rest\n" if defined($rest);
+				print " $key = {"; # "#}"
+				print "$rest"
+					if (defined($rest) && !($rest eq ""));
+				print "\n";
+			}
+
+			# print until next line start with '@'
+			@work = @_;
+			while ($_ = shift(@work))
+			{
+				last if /^@/;
+				print "$_\n" if ($doprint);
+				shift(@_);
+			}
+			# "#{"
+			print "},\n" if ($doprint);
+
+		    } # while
+		} # if extra
+
+		# doi trumps url and arxiv
+		if (defined($doi))
+		{
+			print " doi = \{$doi\},\n";
+		}
+
+		# url trumps arxiv
+		elsif (defined($url))
+		{
+			print " url = \{$url\},\n";
+		}
+
+		# arxiv as url as last resort
+		elsif ($Parxiv_as_url_if_only && defined($arxiv))
+		{
+			print " url = \{http://arxiv.org/abs/$arxiv\},\n";
+		}
+
+		# for arxiv papers, put arxiv abstract id in 'note'
+#		if (0 && $Parxiv_note && $itype eq '@m'
+#			&& $has_url && $url_rest =~ /arxiv/)
+#		{
+#			die "($file) note for arxiv?" if $has_note;
+##			die "($file) no url for arxiv?" unless $has_url;
+#			print " note = $url_rest,\n";
+#		}
+
+		$year = "{$year}" if ($year =~ /\D/); # bracify
+#		if ($year =~ /\D/) { # surround by {}'s if year has nondigits
+#			print	" year = {$year}\n";
+#		} else {
+			print	" year = $year\n";
+#		}
+
+		# "\{" <- just for matching
+		print "\}";
+		print $nl_tail;
+	}
+
+	close(Bfile);
+}

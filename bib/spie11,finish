@@ -1,0 +1,52 @@
+#!/usr/bin/perl -w
+# spie11,finish
+# format entries based on spie mi11 web page html
+# each paragraph is title paper# authors
+
+$home = $ENV{HOME};
+$bib = $home . '/l/src/script/bib/';
+require $bib . 'tolower.pl';
+require $bib . 'author.pl';
+require $bib . 'bibkey.pl';
+require $bib . 'htmlaccent.pl';
+
+$/ = "\n\n"; # slurp paragraph at time
+
+$vol = 7691;
+$year4 = 2011;
+$page = '?';
+
+while (<STDIN>) {
+#	print "`$_'\n";
+
+	if (/^#/) {
+		print $_;
+		next;
+	}
+
+	($title, $num, $auth) = split(/\n/);
+	die "bad `$_'\n" unless defined($auth);
+
+	# remove (country) from author
+	$auth =~ s/Author\(s\): //;
+	$auth =~ s/\(\w+\)/xxx/g;
+	# authors separated only by ','
+	$auth =~ s/, /; /g;
+
+#	$auth =~ s/, /; /g;
+#	$auth =~ s/,  /, /g;
+#print "\n$auth\n";
+	$auth = &htmlaccent($auth);
+	$auth = &author($auth);
+
+	$cite = "spie-$vol . $page $year4";
+	$fake = "\@c xx:xx:xx $cite\n$auth\n$title";
+	@bibkey = &bibkey($fake); 
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	$an = "\@an $num";
+	print "\n\@c $key $cite\n";
+	print "$auth\n$title\n$an\n";
+}

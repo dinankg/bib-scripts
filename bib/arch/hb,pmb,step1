@@ -1,0 +1,62 @@
+#!/usr/bin/perl -w
+#	hb,pmb,step1 vol num mon year
+#	convert PMB html format to a basic format: page\ntitle\nauthor 
+#	html piped in from jour/pmb/do,get,num
+#
+#	typical input line:
+#	<TD><SPAN class=times>1581</SPAN></TD><TD><B class=tocTitle>Temporal resolution requirements for intensity modulated radiation therapy delivered by multileaf collimators</B><BR> <I class=tocAuth>G J Budgell</I> <BR>
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/htmlaccent.pl';
+
+#
+#	slurp paragraph at time
+#
+$/ = "\n\n";
+
+$first = 1;
+
+while (<STDIN>) {
+
+	next unless /tocTitle/ & /tocAuth/;
+
+#	print "`$_'\n\n";
+
+	s/\s\n/ /g;	# join all lines into one
+	s/\n/ /g;	# join all lines into one
+
+	s// /g;	# purge such carriage returns
+
+	#	special characters
+	s/<IMG entity="alpha"[^>]*>/\$\\alpha\$/g;
+	s/<IMG entity=\"beta\"[^>]*>/\$\\beta\$/g;
+	s/<IMG entity="Delta"[^>]*>/\$\\Delta\$/g;
+	s/<IMG entity="gamma"[^>]*>/\$\\gamma\$/g;
+	s/<IMG entity="Gamma"[^>]*>/\$\\Gamma\$/g;
+	s/<IMG entity="lambda"[^>]*>/\$\\lambda\$/g;
+	s/<IMG entity="mu"[^>]*>/\$\\mu\$/g;
+	s/<IMG entity="pi"[^>]*>/\$\\pi\$/g;
+	s/<IMG entity="vecE"[^>]*>/\$E\$/g;
+	s/<IMG entity="leq"[^>]*>/\$\\leq\$/g;
+
+	s/<IMG ALIGN=[^>]*gamma[^>]*>/\$\\gamma\$/gi;
+
+	$_ = &htmlaccent($_);		# accents and scripts
+
+	s/<A href=.*<\/A>//gi;		# purge links
+
+	s/<[^>]*tocTitle>/\n/;		# newline between page and title
+	s/<[^>]*tocAuth>/\nAUTHOR /;	# newline between title and author
+
+	# final cleanup
+	s/<[^>]*>//g;		# purge remaining html
+	s/\t/ /g;		# tabs to space
+	s/  */ /g;		# one white space
+	s/ \n/\n/g;		# trailing white space
+	s/ $//g;		# trailing white space
+	s/^ \s*//;		# leading white space
+
+	print "\n" unless $first;	# paragraph separator
+	$first = 0;
+	print "$_\n";
+}

@@ -1,0 +1,14 @@
+#!/usr/bin/perl -w
+# title
+# reformat title to lower case
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/tolower.pl';
+
+# for each line...
+while (<>)  {
+	$_ = &TitleLower($_);
+#	$_ =~ s/([- ][A-Z][a-z])/&tolower($1)/ge;
+	s/\s+$//;	# trailing spaces
+	print "$_\n";
+}

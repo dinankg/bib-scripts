@@ -1,0 +1,52 @@
+#!/usr/bin/perl -w
+# do-author-title
+# finish converting entries having 2 lines each: author(s) \n title
+
+$cite0 = '@c';
+$cite1 = 'sedona-16 . . 2016';
+
+$home = $ENV{HOME};
+$bib = $home . '/l/src/script/bib/';
+require $bib . '/tolower.pl';
+require $bib . '/author.pl';
+require $bib . '/bibkey.pl';
+
+$/ = ""; # slurp paragraph at time
+
+while (<STDIN>)
+{
+	if (/^#/) # echo comments
+	{
+		print "$_\n";
+		next;
+	}
+
+	@all = split(/\n/);
+	$nline = $#all + 1;
+
+	die "bad paragraph ($nline):\n`$_'\n" unless ($nline == 2);
+
+	$authors = $all[0];
+	$title = $all[1];
+#	$org = $all[2];
+#	$org = $org . $all[3] if defined($all[3]);
+#	$org = $org . $all[4] if defined($all[4]);
+
+	$authors = &author($authors);
+#	$title = &tolower($title);
+	$title = &TitleLower($title);
+
+	$fake = "$cite0 xx:xx:xx $cite1\n$authors\n$title\n";
+	@bibkey = &bibkey($fake); 
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	$cite = $cite1;
+
+	print "$cite0 $key $cite\n";
+	print "$authors\n$title\n";
+#	print "\@u ct12 $page\n";
+#	print "\@an\n$org\n";
+	print "\n";
+}

@@ -1,0 +1,126 @@
+#!/usr/bin/perl -w
+# iop4 vol num mon year journal
+# called by iop2 after iop3 preprocessing,
+# finish converting from temporary iop format to my .b format
+# each input paragraph has the following lines:
+#	page
+#	title
+#	AUTHOR authors
+#	@u doi (doi)
+#
+# In 2008, invpro switched from page#s to article numbers:
+# http://iopscience.iop.org/0266-5611/24/1/010101
+# http://doi.org/10.1088/0266-5611/24/1/010101
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/tolower.pl';
+require $home . '/l/src/script/bib/author.pl';
+require $home . '/l/src/script/bib/bibkey.pl';
+
+$/ = "\n\n"; # slurp paragraph at time
+
+($vol, $num, $mon, $year, $jour) = (@ARGV);
+die "args" unless defined($jour);
+
+$cite0 = "$jour $vol $num pppppp $mon $year";
+
+$first = 1;
+$page1save = "";
+$printsave = "";
+
+while (<STDIN>)
+{
+#	print "`$_'\n";
+
+	next if /\sPreface\n/;
+
+	if (/AUTHOR \n/)
+	{
+		print STDERR "skipping paragraph with no authors: `$_'\n";
+		next;
+	}
+
+	if (!/AUTHOR/)
+	{
+		print STDERR "skipping bad paragraph `$_'\n";
+		next;
+	}
+
+	@all = split(/\n/);
+	if (!defined($all[2]))
+	{
+		print STDERR "skipping bad paragraph `$_'\n";
+		next;
+	}
+
+	$page1 = $all[0];
+	$title = $all[1];
+	if ($title =~ /^Erratum: /)
+	{
+		$title =~ s/^Erratum: //;
+		$title = $title . " (ERRATUM)";
+		$title =~ s/  / /g;
+	}
+	$title = &TitleLower($title);
+	$title =~ s/\s+$//;
+	$all[2] =~ s/AUTHOR //;
+	$all[2] =~ s/ and /, /;
+	$auth = &author($all[2]);
+	if (defined($all[3]))
+	{
+		$url = "$all[3]\n";
+	}
+	else
+	{
+		$url = "";
+	}
+
+
+	$fakeb2 = "\@a xxxxxx $cite0\n$auth\n$title\n";
+	@bibkey = &bibkey($fakeb2); 
+	($author, $yr, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$yr:$code";
+
+	$cite = $cite0;
+
+	if ($year gt 2008 && $jour eq "invpro") # use article id instead of pages
+	{
+		$printnow = "\@a $key $cite\n$auth\n$title\n$url";
+		$printnow =~ s/pppppp/$page1/;
+		print "$printnow\n";
+		next;
+	}
+
+	# below here used only for before 2008 for invpro
+
+	$printnext = "\@a $key $cite\n$auth\n$title\n$url";
+
+	if (!$first)
+	{
+		# page numbers may contain leading letters, like N1-N20
+		($page2l) = $page1save =~ /([A-Z]*)/;
+		($page1l, $page1n) = $page1 =~ /([A-z]*)(\d+)/;
+
+		if ($page2l eq $page1l)	# same type
+		{
+			$page2 = $page1n - 1;
+			$pages = "$page1save-$page2";
+		}
+		else
+		{
+			$pages = "$page1save-";
+		}
+		$printsave =~ s/pppppp/$pages/;
+		print "$printsave\n";
+	}
+
+	$first = 0;
+	$printsave = $printnext;
+	$page1save = $page1;
+}
+
+# print last one
+$pages = "$page1save-";		# unknown last page, of course
+$printsave =~ s/pppppp/$pages/;
+print "$printsave";

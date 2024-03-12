@@ -1,0 +1,26 @@
+#!/bin/csh -e
+# mrm-bib-b2
+# convert bibtex .bib file from mrm web site into my .b2 format
+
+#set bib = ~/l/tex/biblio/jour/wiley/mrm/11/11-01.bib
+set bib = $1
+set tmp1 = /tmp/mrm-bib-b2,tmp.bib
+
+cat $bib \
+	# paragraph breaks between articles. \
+	| perl -pe 's/\@article/\n\@article/' \
+	# journal code \
+	| perl -pe 's/Magnetic Resonance in Medicine/mrm/' \
+	| perl -pe 's/Journal of Magnetic Resonance Imaging/jmri/' \
+	# junk keywords \
+	| perl -ne 'print unless (/^doi/ | /^keywords/ | /^issn/ | /^publisher/)' \
+	# doi \
+	| perl -pe 's|http://(dx.)?doi.org/|doi |' \
+	# remove unicode utf-8 "byte order mark" (BOM) in 1st 3 bytes \
+	# todo: this may be incorrect syntax! \
+	| perl -pe 's/^(0xEF)(0xBB)(0xBF)//' \
+#	| tail -c +4 \
+	>! $tmp1
+
+bib,b2 -fix_author -fix_code $tmp1
+/bin/rm $tmp1

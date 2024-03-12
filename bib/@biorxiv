@@ -1,0 +1,10 @@
+#!/bin/csh
+# @biorxiv [code]
+# convert my shorthand into complete url and open it
+
+if ($#argv < 1) then
+	echo "Usage: $0 type args"
+	exit -1
+endif
+
+@u biorxiv $1

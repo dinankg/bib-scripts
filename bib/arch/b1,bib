@@ -1,0 +1,304 @@
+#!/bin/perl -w
+#	b1,bib
+#	convert my .b1 file format into .bib file format
+#	each entry in line1 can be
+#		{anything but right brace} | [?-] | [0-9a-zA-Z-]
+#	optional arguments:
+#		-an		print annotations
+#		-abs		print abstracts
+#		-error		print errors
+#		-nobrace	no braces around title strings
+#		-abbrev		leave titles as abbreviations
+#		-comment	print comment lines (those beginning with #)
+#
+#	author names should be separated by double spaces
+#	", " separation also allowed, as long as no {}'s present in author list
+
+#	defaults for optional stuff 
+$keepabbrev = 0;		# don't keep abbreviations, expand them
+$printannote = 0;		# don't print annotations
+$printabs = 0;			# don't print multi-line abstracts
+$printcomment = 0;		# don't print comments
+$printerror = 0;		# don't print multi-line @error
+$titlebrace = 1;		# put braces around cap'd words
+$authorbrace = 1;		# put braces around author names with \u{v} etc.
+
+#
+#	read in abbreviations
+#
+if (!$keepabbrev) {
+	$file = "/n/zip/w/fessler/tex/biblio/abbrev.bib";
+	open(Afile, $file) || die "Cannot open '$file'\n";
+	while (<Afile>) {
+		next unless /=/;	# skip blank lines (without "=")
+
+		($abbr, $long) = /\@string{(\S+)\s+=\s*"(.*)"}/;
+		die "abbrev problem `$_'" unless defined($long);
+		$long =~ s/ &/ \\&/;	# & to \& for latex
+
+#		print "abbr='$abbr' long='$long'\n";	# debugging
+		$Abbr{$abbr} = $long;
+	}
+	close(Afile);
+}
+
+#
+#	slurp paragraph at time
+#
+$/ = "";
+$/ = "\n\n";
+
+%EntryType = (	'@a',	'ARTICLE',
+		'@b',	'BOOK',
+		'@c',	'CONFERENCE',
+		'@d',	'PHDTHESIS',
+		'@i',	'INCOLLECTION',
+		'@m',	'MISC',
+		'@p',	'PROCEEDINGS',
+		'@r',	'TECHREPORT');
+
+#
+#	loop over command line filenames
+#
+$firstfile = 1;
+foreach $file (@ARGV) {
+
+	#	optional arguments
+	if ($file eq '-an')	{ $printannote = 1; next; }
+	if ($file eq '-comment'){ $printcomment = 1; next; }
+	if ($file eq '-abs')	{ $printabs = 1; next; }
+	if ($file eq '-error')	{ $printerror = 1; next; }
+	if ($file eq '-nobrace') { $titlebrace = 0; $authorbrace = 0; next; }
+	if ($file eq '-abbrev')	{ $keepabbrev = 1; undef(%Abbr); next; }
+
+	print STDERR "$file\n";
+	open(Bfile, $file);
+
+	print "\n" unless $firstfile;	# extra newline for subsequent files
+	$firstfile = 0;
+
+	while (<Bfile>) {
+		($nl_head) = /^(\n*)/;		# grab leading newlines
+		($nl_tail) = /(\n+)$/;		# grab trailing newlines
+		s/^\n+//;			# remove leading newlines
+		s/(\n+)$//;			# remove trailing newlines
+#		$tmp1 = length($nl_head); $tmp2 = length($nl_tail);
+#		print STDERR "head=$tmp1 tail=$tmp2 `$_'\n"; next;
+#		print "`$nl_head`$_'$nl_tail'\n";	next;
+
+		if (/^#/) {	# skip comment lines
+			print "$nl_head$_$nl_tail" if $printcomment;
+			next;
+		}
+
+		print $nl_head if $nl_head;	# preserve blank lines
+
+		($cite, $author, $title, @extra) = split(/\n/); # input lines
+		($type, $code, $line1) = $cite =~ /(\S+)\s+(\S+)\s+(.*)/;
+
+		# check for repeated "code"
+		print STDERR "Repeat code '$code' in '$File{$code}' '$file'\n"
+			if defined($File{$code});
+		$File{$code} = $file;		# store file for this code
+
+		@line1 = split(/  /, $line1);
+
+#		experiment
+		if (0) {
+			undef	@cite;
+	#		$line1 =~ s/(\{[^}]\}|\S+)\s+(.*)/$2/;
+			print "line1=$line1\n";
+#			$line1 =~ s/({.*})\s+(.*)/$2/;
+			$line1 =~ s/({.*}|\S+)\s+(.*)/$2/;
+			$cite[0] = $1;
+			$cite[1] = $2;
+#			if ($tmp ne $line1[0]) {
+			if (1) {
+				print "line1=$line1\n";
+				print "line1=@line1\n";
+				print "c0=:$cite[0]: c=:$cite[1..$#cite]:\n";
+				exit;
+			}
+		}
+
+		$author =~ s/, /  /g unless $author =~ /[{}]/;
+			# replace ', ' with '  ' (if any) unless {}'s present
+		$author =~ s/  / and /g;
+#		$author =~ s/([A-Z]) /$1. /g;	# put . after initials
+		if ($authorbrace) {		# {} around \~ etc.
+			$author =~ s/ (\w*\\[^ ]*)/ {$1}/g;
+		}
+
+		# surround words in title with caps with {}
+		if ($titlebrace) {
+#			$title =~ s/ ([A-Z][A-Za-z'-]*[a-zA-Z])/ {$1}/g;
+#			$title =~ s/^([A-Z][A-Z]*[A-Z]) /{$1} /g;
+			$title =~ s/([A-Z0-9][A-Za-z0-9'-\.]*[A-Za-z0-9\.])/{$1}/g;
+
+			$title =~ s/ &/ \\&/g;	# & to \& for latex
+		}
+
+		die "Unknown type $type" if !defined($EntryType{$type});
+		$type = $EntryType{$type};
+
+		undef	$address;
+		undef	$booktitle;
+#		undef	$edition;
+		undef	$editor;
+		undef	$institute;
+		undef	$journal;
+		undef	$month;
+#		undef	$note;
+		undef	$number;
+		undef	$pages;
+		undef	$publisher;
+		undef	$school;
+#		undef	$series;
+		undef	$volume;
+		undef	$year;
+#		undef	$abs;
+
+		#
+		#	Get required stuff from line1
+		#
+		if ($type eq 'ARTICLE') {
+			($journal, $volume, $number, $pages, $month, $year) = @line1;
+			$journal = "{$Abbr{$journal}}"	if (defined($Abbr{$journal}));
+			$journal =~ s/ &/ \\&/;	# & to \& for latex
+		}
+		elsif ($type eq 'BOOK') {
+			($publisher, $address, $year) = @line1;
+			$address = "{$Abbr{$address}}" if (defined($Abbr{$address}));
+		}
+		elsif ($type eq 'CONFERENCE') {
+			($booktitle, $volume, $pages, $year) = @line1;
+			$booktitle =~ s/ &/ \\&/;	# & to \& for latex
+			$booktitle = "{$Abbr{$booktitle}}" if (defined($Abbr{$booktitle}));
+		}
+		elsif ($type eq 'PHDTHESIS') {
+			($school, $address, $month, $year) = @line1;
+			$school = "{$Abbr{$school}}" if (defined($Abbr{$school}));
+		}
+		elsif ($type eq 'INCOLLECTION') {
+			($booktitle, $editor, $publisher, $address, $pages, $year) = @line1;
+			$booktitle = "{$Abbr{$booktitle}}" if (defined($Abbr{$booktitle}));
+			$address = "{$Abbr{$address}}" if (defined($Abbr{$address}));
+		}
+		elsif ($type eq 'MISC') {
+			($year) = @line1;
+		}
+		elsif ($type eq 'PROCEEDINGS') {
+			($publisher, $address, $year) = @line1;
+		}
+		elsif ($type eq 'TECHREPORT') {
+			($number, $institute, $address, $month, $year) = @line1;
+			$institute = "{$Abbr{$institute}}" if (defined($Abbr{$institute}));
+			$address = "{$Abbr{$address}}" if (defined($Abbr{$address}));
+		}
+		else {
+			print "Bad record: @_\n";
+			die "Unknown type $type";
+		}
+
+		#
+		#	Print .bib record
+		#
+		if (1) {
+			print	"\@$type\{\n";
+			print	"\t$code,\n";
+			if ($type eq 'PROCEEDINGS') {
+				print	"\teditor =\t\{$author\},\n";
+			} else {
+				print	"\tauthor =\t\{$author\},\n";
+			}
+			print	"\ttitle =\t\t\{$title\},\n";
+			print	"\tjournal =\t$journal,\n"	if ($journal);
+			print	"\tbooktitle =\t$booktitle,\n"	if ($booktitle);
+			print	"\tvolume =\t$volume,\n"	if (defined($volume) && $volume ne '?');
+			print	"\tnumber =\t$number,\n"	if (defined($number) && $number ne '?');
+
+			print	"\teditor =\t$editor,\n"	if (defined($editor) && $editor ne '?');
+			print	"\tinstitution =\t$institute,\n" if (defined($institute) && $institute ne '?');
+			print	"\tpublisher =\t$publisher,\n"	if ($publisher);
+			print	"\tschool =\t$school,\n"	if ($school);
+			print	"\taddress =\t$address,\n"	if (defined($address) && $address ne '?');
+		}
+
+		if (defined($pages) && $pages ne '?' && $pages ne '?-?') {
+			$ptmp = $pages;
+			if ($ptmp =~ /[-A-Z]/) {
+				$pages =~ s/-/--/;
+				print	"\tpages =\t\t\{$pages\},\n";
+			} else {
+				print	"\tpages =\t\t$pages,\n";
+			}
+		}
+
+		print	"\tmonth =\t\t$month,\n"	if (defined($month) && $month ne '?');
+
+		if (@extra) {
+			@_ = @extra;
+			while ($_ = shift(@_)) {
+				die "Extra: $_\n" if !($_ =~ /^@/);
+
+				# abstract: multiple line, starting with @abs
+				if ($_ eq '@abs') {
+					if ($printabs) {
+						print "\tabs = {\n";
+						while ($_ = shift(@_)) {
+							print "$_\n";
+						}
+						print "},\n";
+					}
+					last;
+				}
+
+				# error: multiple line, starting with @error
+				if ($_ eq '@error') {
+					if ($printerror) {
+						print "\terror = {\n";
+						while ($_ = shift(@_)) {
+							print "$_\n";
+						}
+						print "},\n";
+					}
+					last;
+				}
+
+				($a,$b) = /@(\w+)\s+(.*)/;
+				die "a bug '$a' in='$_'" unless defined($a);
+				die "b bug '$b' in='$_'" unless defined($b);
+
+				if ($a eq 'abs') {
+					print "\t$a =\t\t{$b},\n";
+				} elsif ($a eq 'error') {
+					print "\t$a =\t\t{$b},\n";
+				} elsif ($a eq 'note') {
+					print "\t$a =\t\t{$b},\n";
+				} elsif ($a eq 'an') {
+					print "\tannote =\t{$b},\n"
+						if $printannote;
+				} elsif ($a eq 'url') {
+					print "\t$a =\t\t{$b},\n";
+				} elsif ($a eq 'html') {
+					print "\t$a =\t\t{$b},\n";
+				}
+				
+				# if only digits, print w/o {}'s
+				else {
+					if ($b =~ /[a-zA-Z]/) {
+						print "\t$a =\t{$b},\n";
+					} else {
+						print "\t$a =\t$b,\n";
+					}
+				}
+			}
+		}
+
+		print	"\tyear =\t\t$year\n";
+		print	"\}";
+		print	$nl_tail;
+	}
+
+	close(Bfile);
+}

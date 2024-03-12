@@ -1,0 +1,53 @@
+#!/bin/csh -e
+#	do,b2
+
+#	create .bib files from .b1 files,
+#	then re-create .b1 file from .bib file and compare!
+#	sanity check before creating .b2 files!
+if 0 then
+	set b1dir = ../b1
+	set arg = "-nobrace -an -abbrev -abs -comment -error"
+
+	foreach b1i ($b1dir/*.b1)
+		set root = `basename $b1i .b1`
+		set bib = $root.bib
+		set b1o = $root.b1
+		if ((-e $b1o) && 1) then
+			echo skipping $root
+			continue;
+		endif
+		b1,bib $arg $b1i > $bib
+		bib,b1 $bib > $b1o
+		diff $b1i $b1o
+	end
+endif
+
+#
+#	.b2 files from .bib files
+#
+if 0 then
+	foreach bib (*.bib)
+		echo $bib
+		set root = `basename $bib .bib`
+		set b2o = $root.b2
+		bib,b2 $bib > $b2o
+	end
+endif
+
+#
+#	.new files from .b2 files
+#
+if 1 then
+	set arg = "-nobrace -an -abbrev -abs -comment -error"
+	foreach b2 (*.b2)
+		echo $b2
+		set root = `basename $b2 .b2`
+		set old = $root.bib
+		set new = $root.new
+		if (-e $new) then
+			continue
+		endif
+		b2,bib $arg $b2 > $new
+		diff $old $new
+	end
+endif

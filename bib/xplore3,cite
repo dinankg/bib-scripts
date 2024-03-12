@@ -1,0 +1,107 @@
+#!/usr/bin/perl -w
+# xplore3,cite
+# determine citation info:
+# journal volume issue month year
+
+undef $/; # slurp entire file
+$in = <STDIN>;
+$in =~ s/&nbsp;/ /g; # replace with spaces 
+$in =~ s/\s+/ /g; # merge into one line
+#print "in=`$in'";
+
+# find start of string that contains journal name
+$_ = $in;
+($junk1, $junk2, $save) =
+ /.*images\/(cover|branding)_images\/[^ ]*\.(jpg|gif)\" alt=\"(.*)\" width=\"/;
+undef($junk1);
+undef($junk2);
+# if no cover image, e.g., for SPMag, then look in the html title
+if (!defined($save)) {
+	($save) = /\<title\>Welcome to.*\: (.*)\<\/title\>/;
+	die "Fail: journal name\n " unless defined($save);
+}
+#s/.*images\/cover_images\/.*.jpg\" alt=\"//;
+#s/width=\".*//;
+#s/\"\s?$//;
+
+$ieeet = "IEEE Transactions on";
+$ieee = ", $ieeet";
+$ieeej = ", IEEE Journal of";
+%mag = (
+ "ASSP Magazine, IEEE ",	"ieee-asspmag",
+ "Acoustics, Speech, and Signal Processing",	"ieee-t-assp",
+ "Biomedical Engineering$ieee",	"ieee-t-bme",
+ "Computational Imaging$ieee",	"ieee-t-ci",
+ "Engineering in Medicine and Biology Magazine, IEEE",	"ieee-embmag",
+ "Image Processing$ieee",	"ieee-t-ip",
+ "Information Theory$ieee",	"ieee-t-it",
+ "$ieeet Information Theory",	"ieee-t-it",
+ "Medical Imaging$ieee",	"ieee-t-mi",
+ "$ieeet Medical Imaging",	"ieee-t-mi",
+ "Nuclear Science$ieee",	"ieee-t-ns",
+ "$ieeet Nuclear Science",	"ieee-t-ns",
+ "Proceedings of the IEEE",	"ieee-proc",
+ "Selected Topics in Signal Processing$ieeej", "ieee-j-stsp",
+ "Signal Processing Magazine, IEEE",	"ieee-spmag",
+ "IEEE Signal Processing Magazine", "ieee-spmag",
+ "Signal Processing Letters, IEEE",	"ieee-spl",
+ "Signal Processing$ieee",		"ieee-t-sp",
+ "Pattern Analysis and Machine Intelligence$ieee",	"ieee-t-pami",
+ "Transactions on Pattern Analysis and Machine Intelligence",	"ieee-t-pami"
+ );
+
+$_ = $save;
+$found = 0;
+while (($long, $short) = each %mag) {
+#	print "long=`$long' short=`$short'\n";
+	if (/^$long/) {
+		$found = 1;
+		$journal = $short;
+		next;
+	}
+}
+
+die "Fail: journal title not found in `" . substr($_, 0, 60) . "'\n "
+	unless $found;
+#print "journal = $journal\n";
+
+
+#
+# now volume issue month year
+# need to allow hyphenated months like Jan.-Feb.
+#
+$_ = $in;
+s/Volume:\s*BME-/Volume: /; # trick: for old T-BME issues
+($vol, $issue, $date) = /Volume: (\d+).*Issue: (\d+).*Date:\s*([\w\-\.]*\s*\d+)/;
+die "Fail: vol issue date\n " unless defined($date);
+
+##$vol = $in;
+##$vol =~ s/.*Volume: (\d+) .*/$1/;
+#$issue = $in;
+#$issue =~ s/.*Issue: (\d+) .*/$1/;
+#$date = $in;
+#$date =~ s/.*Date: (\w+ \d+).*/$1/;
+
+$date =~ tr/A-Z/a-z/;	# uncap month
+
+	$date =~ s/january/jan/;
+	$date =~ s/jan\./jan/;
+	$date =~ s/february/feb/;
+	$date =~ s/feb\./feb/;
+	$date =~ s/march/mar/;
+	$date =~ s/april/apr/;
+#	$date =~ s/may/may/;
+	$date =~ s/jun[e.]/jun/;
+	$date =~ s/july/jul/;
+	$date =~ s/august/aug/;
+	$date =~ s/aug\./aug/;
+	$date =~ s/september/sep/;
+	$date =~ s/sept\./sep/;
+	$date =~ s/october/oct/;
+	$date =~ s/oct\./oct/;
+	$date =~ s/november/nov/;
+	$date =~ s/nov\./nov/;
+	$date =~ s/december/dec/;
+	$date =~ s/dec\./dec/;
+
+print "$journal $vol $issue pppp $date";

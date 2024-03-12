@@ -1,0 +1,131 @@
+#!/bin/csh -e
+# xplore1
+# step1: get "isNumber" from ieee xplore, store in "isnum" subdirectory
+# caution: should be run from within the directory of the journal!
+
+if ($#argv >= 1) then
+	set pnum = $1
+else
+	set jour = `pwd`
+	set jour = `dirname $jour`
+	set jour = `pwd | sed -e 's:'"$jour"'/::'`
+	echo $jour
+
+	if ($jour == proc) then
+		set pnum = 5
+	else if ($jour == asspmag) then
+		set pnum = 53
+	else if ($jour == embmag) then
+		set pnum = 51
+	else if ($jour == jstsp) then
+		set pnum = 4200690
+	else if ($jour == spl) then
+		set pnum = 97
+	else if ($jour == spmag) then
+		set pnum = 79
+	else if ($jour == tassp) then
+		set pnum = 29
+	else if ($jour == tbme) then
+		set pnum = 10
+	else if ($jour == tit) then
+		set pnum = 18
+	else if ($jour == tmi) then
+		set pnum = 42
+	else if ($jour == tip) then
+		set pnum = 83
+	else if ($jour == tns) then
+		set pnum = 23
+	else if ($jour == tpami) then
+		set pnum = 34
+	else if ($jour == tsp) then
+		set pnum = 78
+	else
+		echo "journal not done - fix xplore1 NOW"
+		exit -1
+	endif
+endif
+
+set tmp_top = /tmp/t,x1,top.htm
+set tmp_issue = /tmp/t,x1,issue.htm
+set tmp_year = /tmp/t,x1,year.htm
+set url = "http://ieeexplore.ieee.org/xpl/RecentIssue.jsp?puNumber=$pnum"
+echo "$url"
+if 1 then
+	echo "getting top html"
+	lynx -source "$url" > $tmp_top
+endif
+exit
+
+#
+# find isNumbers from current year, if any
+#
+if 1 then
+	echo "finding isNumbers from current year"
+	cat $tmp_top | xplore1,isnum > $tmp_issue
+	set n_issue = `cat $tmp_issue | wc -l`
+	echo "$n_issue issues in current year"
+endif
+
+#
+# list of years online
+#
+if 1 then
+	# xplore 2.0
+	cat $tmp_top \
+		# merge to one big line \
+		| perl -pe 's/[\r\n]+/ /g' \
+		# split \
+		| perl -pe 's/\<option value=\"(\d\d\d\d)\"/\njfyear=$1\n/g' \
+		| grep 'jfyear=' \
+		| perl -pe 's/jfyear=//' \
+		>! $tmp_year
+
+	set year0 = `head -1 $tmp_year`
+	set years = `cat $tmp_year`
+
+	#set year0 = \
+#	`cat $tmp_issue | perl -pe 's/\n//' | perl -pe 's/.*(20[0-9]{2}).*/$1/'`
+	echo "current year '""$year0'"
+
+#	set years = `cat $tmp_top | grep "/xpl/RecentIssue.jsp?puNumber=$pnum&year=" | perl -pe 's/.*year=(\d{4}).*/$1/'`
+#	set years = "$year0 $years"
+endif
+
+if !(-e isnum) then
+	mkdir isnum
+endif
+
+#
+# for each year, extract isNumbers for that year
+#
+foreach year ($years)
+	set yr = `echo $year | perl -pe 's/^19//; s/^20//'`
+	set file = isnum/$yr
+	if (($year != $year0) && (-e $file)) then
+		echo "$year isNumbers already stored in $file"
+		continue
+	endif
+
+	echo "getting isNumbers for year=$year"
+
+	set url = \
+"http://ieeexplore.ieee.org/xpl/RecentIssue.jsp?puNumber=$pnum&year=$year"
+#	echo "$url"
+	lynx -source "$url" > $tmp_year
+
+	cat $tmp_year | xplore1,isnum | tac >! $file
+
+	if 0 then
+		cat $tmp_year | grep -e Issue \
+		# extract isNumber and Issue from html \
+		# ...jsp?isNumber=26678"> April 2003, Vol.50, Issue 2</a>... \
+		| perl -ne 'if (/tocresult.jsp\?isNumber=/) { s/.*isNumber=(\d*).* Issue (\d*).*/$1 $2/; print;}' \
+		# reverse bottom to top (so issue 1 is first) \
+		| tac \
+		>! $file
+	endif
+
+	sleep 1
+end
+
+/bin/rm $tmp_top $tmp_issue $tmp_year

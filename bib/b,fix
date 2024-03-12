@@ -1,0 +1,10 @@
+#!/bin/csh
+# b,fix
+# fix up a line in a .b file
+
+sed -e 's;https://dx.doi.org/;@doi ;' | \
+sed -e 's;https://doi.org/;@doi ;' | \
+sed -e 's;https://arxiv.org/abs/;@arxiv ;' | \
+sed -e 's;https://arxiv.org/pdf/;@arxiv ;' | \
+sed -e 's/.pdf//'
+#https://arxiv.org/pdf/1905.02567.pdf

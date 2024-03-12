@@ -1,0 +1,23 @@
+#!/bin/csh
+#	do-new [files]
+#	change to keys
+
+foreach file ($*)
+	echo $file
+	set new = $file.new
+	do-killcolcap $file > $new
+	if $status then
+		echo failed
+		exit
+	endif
+
+	diff $file $new > /dev/null
+	if $status then
+		mv $file $file.old.$$
+		mv $new $file
+		echo changed $file
+	else
+		echo no change to $file
+	endif
+	rm -f $new
+end

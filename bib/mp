@@ -1,0 +1,20 @@
+#!/bin/csh -e
+# mp
+# open given volume/number of Medical Physics (medphys)
+
+if ($#argv <= 2) then
+	echo "Usage: $0 vol num"
+endif
+set vol = $1
+set num = $2
+
+# set urlbase = 'http://online.medphys.org/resource/1/mphya6/'
+set urlbase = 'http://scitation.aip.org/content/aapm/journal/medphys/' # 2014-09
+#set url = "$urlbase""v$vol/i$num"
+set urlend = "?pageSize=100&page=1" # 2014-09
+set url = "$urlbase$vol/$num$urlend" # 2014-09
+#set url = "$urlbase"Volume=$vol'&Issue='$num
+set prox = 'http://proxy.lib.umich.edu/login?url='
+set url = "$prox$url"
+echo "$url"
+open "$url"

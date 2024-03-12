@@ -1,0 +1,41 @@
+#!/bin/csh -e
+# nss
+# search nss on xplore
+
+set year = 1996
+set year = 2004
+
+set tmp = /tmp/tmp-nss
+cat >! $tmp << End
+531 1990
+623 1991
+1042 1992
+1093 1993
+3349 1994
+3786 1995
+4502 1996
+5472 1997
+6268 1998
+6793 1999
+7545 2000
+7884 2001
+8777 2002
+9356 2003
+9892 2004
+10641 2005
+End
+
+set punum = `cat $tmp | grep $year | awk '{print $1}'`
+echo "year=$year punum=$punum"
+
+
+# opac for conferences:
+# http://ieeexplore.ieee.org/servlet/opac?punumber=3786
+# opac for journals:
+# http://ieeexplore.ieee.org/servlet/opac?punumber=X&isvol=Y&isno=Z
+
+set term=$1
+
+set url = 'http://ieeexplore.ieee.org/search/searchresult.jsp?queryText=%28'$term'+%3Cin%3E+metadata%29+%3Cand%3E+%28'$punum'+%3Cin%3E+punumber%29&coll2=ieeecnfs&coll3=ieecnfs&history=yes&reqloc=others&scope=metadata&imageField2.x=0&imageField2.y=0'
+
+open "$url"

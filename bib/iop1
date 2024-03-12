@@ -1,0 +1,114 @@
+#!/bin/csh -e
+# iop1
+# get top-level html files for each IoP volume
+# store url's in "vol/$vol" - must be run from journal directory
+# pmb: volume 1 in 1964
+# invpro: vol 1 in 1985
+
+set debug = 0
+set exe = "`basename $0` :"
+alias note "echo $exe "
+
+if !(-d vol) then
+	note "need subdirectory 'vol'"
+	exit -1
+endif
+
+set jour = `pwd`
+set jour = `dirname $jour`
+set jour = `pwd | sed -e 's:'"$jour"'/::'`
+note "jour = $jour"
+
+if ($jour == invpro) then
+	set code = "0266-5611"
+	set vol = 32; # 2016
+else if ($jour == pmb) then
+	set code = "0031-9155"
+	set vol = 61; # 2016
+else
+	note "unknown journal $jour"
+	exit -1
+endif
+
+
+# typical issue url is:
+# http://iopscience.iop.org/0266-5611/26/1 # invpro
+# http://iopscience.iop.org/0031-9155/61/9 # pmb
+# $url_iop/$code/$vol/$issue
+
+set url_iop = "http://iopscience.iop.org"
+
+
+# look for (new) volumes on site until "not found"
+while (1)
+	# the following URL goes straight to the appropriate volume
+	set url_vol = "$url_iop/volume/$code/$vol"
+
+	set v2 = `printf "%02d" $vol` # two-digit volume 01 02 ...
+
+	set out = vol/$v2
+	if (-e $out) then
+		# the following test is not useful; # of issues varies 6,12,24
+		if (0 && ("`wc -l $out`" == "12 $out")) then
+			note "volume $vol has 12 issues already"
+			exit -1
+		endif
+		note "volume $out found : updating"
+	else
+		note "volume $vol : creating new"
+	endif
+
+	set tmp1 = /tmp/t,iop1,1.htm
+	set tmp2 = /tmp/t,iop1,2.htm
+	if !($debug) then
+		# -accept_all_cookies
+		lynx -source "$url_vol" > $tmp1
+	endif
+
+	set done = `cat $tmp1 | perl -ne 'print "1" if /not been found/'`
+	if ("$done" != "") then
+		note "done at volume $vol because it does not yet exist"
+		/bin/rm $tmp1
+		exit 0
+	endif
+
+	set linkstart = "\/$code\/$vol\/"; # issue links start with this
+	set linkend = "<\/span> "; # and end with this (the space matters!)
+	note "link start = $linkstart"
+
+	cat $tmp1 \
+		# merge into one long line \
+		| perl -pe 's/\n/ /g' \
+		# multiple spaces into one \
+		| perl -pe 's/\s+/ /g' \
+		# newline before link start \
+		| perl -pe "s/($linkstart)/\n\1/g" \
+		# newline after link end \
+		| perl -pe "s/($linkend)/\n/" \
+		# keep only issue links \
+		| perl -ne "print if /$linkstart/" \
+		# remove "Number" stuff \
+		| perl -pe 's/\".*>Number (\d*), (\d*)/ \1/' \
+		# remove html stuff \
+		| perl -pe 's/<\/a> <span>/ /' \
+		| perl -pe 's/<span itemprop=\"pageStart\">//' \
+		| perl -pe 's/<\/span>//' \
+		# abbreviate months \
+		| month,lower,3 \
+		# preface with base url \
+		| perl -pe 's,^,'"$url_iop"',' \
+	>! $tmp2
+
+	if !($debug) then
+		cat $tmp2 >! $out
+
+		sleep 2
+		/bin/rm $tmp1 $tmp2
+
+		@ vol += 1
+	else
+		note "tmp2 :"
+		cat $tmp2
+		exit -1
+	endif
+end

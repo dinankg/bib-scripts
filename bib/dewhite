@@ -1,0 +1,12 @@
+#!/bin/csh
+#	dewhite
+#	remove whitespace from stdin and write to stdout:
+#		all leading white
+#		all trailing white
+#		reduce multiple whites in middle to single space
+
+if ($#argv > 0) then
+	dewhite < $1
+else
+	perl -ne 's/^\s+//; s/\s+$//; s/\s+/ /g; print "$_\n" if /\w/'
+endif

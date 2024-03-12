@@ -1,0 +1,63 @@
+#!/usr/bin/perl -w
+# hb,osa vol num mon year
+# convert from OSA html format to my .b format
+# NEW incoming format:	title \n page_line \n author
+#	page_line looks like:
+#	JOSA A, Vol. 22, Issue 7, pp. 1414-1419 (July 2005)
+# OLD incoming format:	title \n author \n pp. #-
+# unfortunately, depending on the year it can be either format!
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/tolower.pl';
+require $home . '/l/src/script/bib/author.pl';
+require $home . '/l/src/script/bib/bibkey.pl';
+
+$vol = $ARGV[0];
+$num = $ARGV[1];
+$mon = $ARGV[2];
+$year = $ARGV[3];
+die "args" unless defined($year);
+
+$/ = "\n\n"; # slurp paragraph at time
+
+$cite0 = "josaa $vol $num Pages $mon $year";
+
+while (<STDIN>) {
+#	print "`$_'\n\n";
+
+	@all = split(/\n/);
+	if (!defined($all[2])) {
+		print STDERR "skipping bad paragraph `$_'\n";
+		next;
+	}
+
+	$title = &TitleLower($all[0]);
+
+	# figure out which of the two paragraph formats it is
+	# todo: should check page line for 'pp' to verify
+	if ($all[1] =~ /JOSA A/) { # older format, e.g., 2005
+		$auth = &author($all[2]);
+		$page1 = $all[1];
+		$page1 =~ s/.*pp\. //;	# eliminate "... pp. "
+		$page1 =~ s/ .*$//;	# eliminate everything after pages
+	} else { # newer format, e.g., 2006
+		$auth = &author($all[1]);
+		$page1 = $all[2];
+		$page1 =~ s/^pp\. //;	# eliminate "pp. "
+		$page1 =~ s/ //g;	# eliminate spaces
+	}
+
+	$fakeb2 = "\@a xx:xx:xx $cite0\n$auth\n$title\n";
+	@bibkey = &bibkey($fakeb2); 
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	$cite = $cite0;
+	$cite =~ s/Pages/$page1/;
+
+	print "\n" unless $first;
+	print "\@a $key $cite\n$auth\n$title\n";
+
+	$first = 0;
+}

@@ -1,0 +1,73 @@
+#!/bin/csh -e
+# ieee-bib-b2
+# convert bibtex .bib file from ieee web site into my .b2 format
+
+#set bib = ~/l/tex/biblio/jour/wiley/mrm/11/11-01.bib
+set bib = $1
+set tmp1 = /tmp/ieee-bib-b2,tmp.bib
+
+cat $bib \
+	# "degrees" symbol ° = \xB0 \
+	| perl -pe 's/\xB0/^0/g' \
+	# symbol × = \xD7 \
+	| perl -pe 's/\xD7/\$\\times\$/g' \
+	# closing brace \
+	| perl -pe 's/,\}$/,\n\}/' \
+	# early view ones are listed as "@null" \
+	| perl -pe 's/\@null/\n\@article/i' \
+	# paragraph breaks between articles. \
+	| perl -pe 's/\@article/\n\@article/i' \
+	| perl -pe 's/\@inproceedings/\n\@conference/i' \
+	# article code on its own line \
+	| perl -pe 's/\@article\{([^,]*),\s?\n$/\@article\{\n$1,\n/i' \
+	| perl -pe 's/\@inproceedings\{([^,]*),\s?\n$/\@inproceedings\{\n$1,\n/i' \
+	# journal code \
+#	| perl -pe 's/Magnetic Resonance in Medicine/mrm/' \
+	| perl -pe 's/Biomedical Engineering, IEEE Transactions on/ieee-t-bme/' \
+	| perl -pe 's/IEEE Transactions on Biomedical Engineering/ieee-t-bme/' \
+	| perl -pe 's/{Computer Vision and Pattern Recognition[^}].*}/cvpr/' \
+	| perl -pe 's/{IEEE Transactions on Computational Imaging}/ieee-t-ci/' \
+	| perl -pe 's/{IEEE Transactions on Image Processing}/ieee-t-ip/' \
+	| perl -pe 's/Image Processing, IEEE Transactions on/ieee-t-ip/' \
+	| perl -pe 's/{Image Processing [^}].*}/icip/' \
+	| perl -pe 's/Information Theory, IEEE Transactions on/ieee-t-it/' \
+	| perl -pe 's/Medical Imaging, IEEE Transactions on/ieee-t-mi/' \
+	| perl -pe 's/IEEE Transactions on Medical Imaging/ieee-t-mi/' \
+	| perl -pe 's/Nuclear Science, IEEE Transactions on/ieee-t-ns/' \
+	| perl -pe 's/IEEE Transactions on Nuclear Science/ieee-t-ns/' \
+	| perl -pe 's/Pattern Analysis and Machine Intelligence, IEEE Transactions on/ieee-t-pami/' \
+	| perl -pe 's/IEEE Transactions on Pattern Analysis and Machine Intelligence/ieee-t-pami/' \
+	| perl -pe 's/Proceedings of the IEEE/ieee-proc/' \
+	| perl -pe 's/IEEE Transactions on Signal Processing/ieee-t-sp/' \
+	| perl -pe 's/Signal Processing, IEEE Transactions on/ieee-t-sp/' \
+	| perl -pe 's/Signal Processing Letters, IEEE/ieee-spl/' \
+	| perl -pe 's/IEEE Signal Processing Letters/ieee-spl/' \
+	| perl -pe 's/Signal Processing Magazine, IEEE/ieee-spmag/' \
+	| perl -pe 's/IEEE Signal Processing Magazine/ieee-spmag/' \
+	| perl -pe 's/IEEE Journal of Selected Topics in Signal Processing/ieee-jstsp/' \
+	| perl -pe 's/Selected Topics in Signal Processing, IEEE Journal of/ieee-jstsp/' \
+	| perl -pe 's/Statistical Signal Processing Workshop \(SSP\), 2012 IEEE/iw-ssp/' \
+	| perl -pe 's/\{Biomedical Imaging \(ISBI\), .* International Symposium on\}/isbi/' \
+	| perl -pe 's/\{.*IEEE.*Int.*Symposium on Biomedical Imaging.*\}/isbi/' \
+	| perl -pe 's/\{IEEE Nuclear Science Symposium Conference Record, 2005\}/nss/' \
+	| perl -pe 's/\{.... IEEE International Conference on Image Processing \(ICIP\)\}/icip/' \
+	| perl -pe 's/\{.... IEEE International Conference on Acoustics, .* Processing \(ICASSP\)\}/icassp/' \
+	| perl -pe 's/\{Mathematical Programming}/mathprog/' \
+	| perl -pe 's/\{Journal of Optimization Theory and Applications}/jota/' \
+	# junk keywords - no! make bib,b2 do it in case multi-line \
+#	| perl -ne 'print unless (/^doi/ | /^keywords/ | /^issn/ | /^publisher/)' \
+	| perl -ne 'print unless (/^issn\s*=\s*/i)' \
+	# title on its own line \
+	| perl -pe 's/, title=/,\ntitle=/' \
+	# abbreviate month \
+	| perl -pe 's/month=\{sept. \},/month={sep}/' \
+	# doi \
+	| perl -pe 's|http://(dx.)?doi.org/|doi |' \
+#	# remove unicode utf-8 "byte order mark" (BOM) in 1st 3 bytes \
+#	| tail -c +4 \
+	>! $tmp1
+
+bib,b2 -fix_author -fix_code -title_lower $tmp1 \
+	# eliminate @month \
+	| perl -ne 'print unless (/^\@month/)'
+/bin/rm $tmp1

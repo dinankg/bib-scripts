@@ -1,0 +1,32 @@
+#!/usr/bin/perl -w
+# ismrm-author-fix
+# fix author names for ismrm 2008, 2009
+
+$yr = "09";
+$home = $ENV{HOME};
+$dir = "$home/l/src/script/bib";
+require "$dir/author.pl";
+require "$dir/author1last.pl";
+
+# for each line...
+while (<>)  {
+	s/$//;
+
+	next if (/^\d\d*,/);
+#		($page) = /^(\d\d\d\d),/;
+
+	if (!(/Author = /)) {
+		print;
+		next;
+	}
+
+	($auth) = /Author = {(.*)}/;
+
+	$auth =~ s/ and /\; /g;
+
+	$line = author($auth);
+
+	$n1 = author1last($line);
+	print "$n1:$yr:,\n";
+	print "Author = {$line}\n";
+}

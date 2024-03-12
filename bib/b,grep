@@ -1,0 +1,173 @@
+#!/usr/bin/perl -w
+# b,grep
+# print .b records containing given key
+# usage:
+# echo filename[s] | b,grep [-k[ey] key1] [-k[ey] key2] key0
+# options
+#	-case		keep case rather than default conversion to lower case
+#	-chat		enable verbosity
+#	-k		require another keyword
+# Copyright 2003-12-3, Jeff Fessler, The University of Michigan
+
+$/ = ""; # slurp paragraph at time
+
+$chat = 0;
+$showfile = 1;
+$tolower = 1;
+$key0 = " "; # trick: just use a space since all records should have that!
+$key1 = " "; # ""
+$key2 = " "; # ""
+$key3 = " "; # ""
+$not1 = "ZzZzZ"; # trick: an unlikely phrase
+$not2 = "ZzZzZ"; # ""
+
+@files = split(/\n/, <STDIN>);
+die "no files requested" if ($#files < 0);
+
+if (0)
+{
+	foreach $file (@files)
+	{
+		print "`$file'\n";
+	}
+	exit -1;
+}
+
+
+#
+# process arguments and options
+#
+foreach $arg (@ARGV)
+{
+
+	if ($arg eq "-notkey" || $arg eq "-n")
+	{
+		if ($not1 eq "ZzZzZ") {
+			undef $not1; # catch it next time!
+		} elsif ($not2 eq "ZzZzZ") {
+			undef $not2;
+		} else {
+			die "too many nots requested";
+		}
+		next;
+	}
+
+	if (!defined($not1))
+	{
+		$not1 = $arg;
+		print "not1='$not1'\n";
+		next;
+	}
+
+	if (!defined($not2))
+	{
+		$not2 = $arg;
+		print "not2='$not2'\n";
+		next;
+	}
+
+	if ($arg eq "-chat")
+	{
+		$chat = 1;
+		next;
+	}
+
+	if ($arg eq "-case")
+	{
+		$tolower = 0;
+		next;
+	}
+
+	if ($key0 eq " ")
+	{
+		$key0 = $arg;
+		print "key0='$key0'\n";
+		next;
+	}
+
+	if ($key1 eq " ")
+	{
+		$key1 = $arg;
+		print "key1='$key1'\n";
+		next;
+	}
+
+	if ($key2 eq " ")
+	{
+		$key2 = $arg;
+		print "key2='$key2'\n";
+		next;
+	}
+
+	if ($key3 eq " ")
+	{
+		$key3 = $arg;
+		print "key3='$key3'\n";
+		next;
+	}
+
+	die "too many keys requested `$arg'";
+}
+
+die "key0?" unless defined($key0);
+if ($tolower)
+{
+	$key0 =~ tr/A-Z/a-z/;
+	$key1 =~ tr/A-Z/a-z/;
+	$key2 =~ tr/A-Z/a-z/;
+	$not1 =~ tr/A-Z/a-z/;
+	$not2 =~ tr/A-Z/a-z/;
+}
+
+
+#
+# trick: replace fessler-96-srp with fessler:96:srp
+#
+$key0 =~ s/\,early\.pdf$//; # remove ,early.pdf
+$key0 =~ s/\,arxiv.*\.pdf$//; # remove ,arxiv*.pdf
+$key0 =~ s/\,pre\.pdf$//; # remove ,pre.pdf
+$key0 =~ s/-(\d\d)-/:$1:/	if ($key0 =~ /-\d\d-/);
+$key0 =~ s/-(\d\d\d\d)-/:$1:/	if ($key0 =~ /-\d\d\d\d-/);
+$key0 =~ s/--/::/		if ($key0 =~ /--/);
+$key0 =~ s/\/$//;	# trailing "/" if directory
+
+$key0 =~ s/\.pdf$//; # remove trailing .pdf
+
+#
+# look in each file
+#
+foreach $file (@files)
+{
+	open(File, $file) || die "Cannot open '$file'\n";
+	print "file = `$file'\n" if ($chat);
+
+	# get just last part of filename
+	if ($file =~ /\/jour\//)
+	{
+		$file =~ s/.*\/jour\/(.*)/$1/;
+	}
+	elsif ($file =~ /\/b2/)
+	{
+		$file =~ s/.*\/b2\///;
+	}
+	else
+	{
+		@file = split(/\//, $file);
+		$file = $file[$#file];	
+	}
+
+	while (<File>)
+	{
+		chop;
+		$tmp = $_;
+		tr/A-Z/a-z/;
+
+		if (/$key0/ && /$key1/ && /$key2/ && /$key3/ && 
+				!(/$not1/ || /$not2/))
+		{
+			print "------ $file\n" if $showfile;
+			print "$tmp\n";
+		}
+	}
+	close(File);
+}

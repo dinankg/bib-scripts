@@ -1,0 +1,54 @@
+#!/bin/csh -e
+#	do,get,num
+#	get issue number html files for each pmb year
+#	http://www.iop.org/EJ/S/3/264/volume/0031-9155/$vol
+
+set yr_start = 1990
+
+set yr_end = $yr_start
+set yr_start = 1999
+set yr_end = 1999
+
+set yr_start = 1956
+set yr_end = 2002
+
+set yr = $yr_start
+while ($yr <= $yr_end)
+	# extract relevant "url/vol/num month year" from volume files
+	grep --no-filename -e $yr" " vol/* >! tmp
+	# find maximum number
+	set nline = `wc tmp | awk '{print $1}'`
+
+	while ($nline >= 1)
+#		echo "nline = $nline"
+		set line = (`tail --lines=$nline tmp | head -1`)
+		# url for this vol/num is first string on line
+		set url = $line[1]
+		set num = $line[2]
+		set mon = $line[3]
+		set vol = `echo "$url" | sed -e 's;http://www.iop.org/EJ/S/3/264/toc/0031-9155/;;' -e "s;/$num;;"`
+		echo "vol=$vol url=$url"
+
+		set dir = issue/$yr
+		set out = $dir/$vol,$num,$mon	# output file for issue
+		if !(-d $dir) mkdir $dir
+
+		if !(-e $out) then
+			echo "doing $out"
+			lynx -source "$url" \
+			# force new paragraph at each article entry \
+			| perl -ne 'if (/class=times/) {print "\n$_"} else {print}' \
+			| hb,pmb,step1 $vol $num $mon $yr \
+			> $out
+
+			sleep 2
+		else
+#			echo "$out already done"
+		endif
+
+		@ nline -= 1
+	end
+
+	@ yr += 1
+end
+/bin/rm tmp

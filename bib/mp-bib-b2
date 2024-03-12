@@ -1,0 +1,32 @@
+#!/bin/csh -e
+# mp-bib-b2
+# convert bibtex .bib file from mp (medphys) web site into my .b2 format
+
+set bib = $1
+set tmp1 = /tmp/mp-bib-b2,tmp.bib
+
+cat $bib \
+	# paragraph breaks between articles. \
+	| perl -pe 's/\@journal article/\n\@article/i' \
+	# journal code \
+	| perl -pe 's/coden = \{MPHYA6\}/journal = \{mp\}/' \
+	| perl -pe 's/^journal = \{Medical Physics\},$/journal = mp,/' \
+	# url is pointless - get it from "doi =" instead \
+	| perl -pe 's/^url = .*\n//' \
+	# doi \
+	| perl -pe 's|http://(dx.)?doi.org/doi/|doi |' \
+	| perl -pe 's/DOI://' \
+	# doi -> url \
+	| perl -pe 's/^doi = \{/url = doi /' \
+	# extra doi \
+	| perl -pe 's/^doi = .*\n//' \
+	# extra "collaboration" \
+	| perl -pe 's/^collaboration = .*\n//' \
+	# publisher \
+	| perl -pe 's/^publisher = .*\n//' \
+	# weird double spaces in names: \
+	| perl -pe 's/ and  / and /g' \
+	>! $tmp1
+
+bib,b2 -fix_author -fix_code -title_lower $tmp1
+/bin/rm $tmp1

@@ -1,0 +1,135 @@
+#!/bin/csh -e
+#	tmi,do
+#	extract IEEE T-MI table of contents from Iowa web page
+#	1982-1995	4 issues per year
+#	1996-		6 issues per year
+#
+#	1994- can be access using 
+#	http://www.biblio.ieee.org/search97cgi/s97_cgi
+#	((Medical Imaging <in> jn) and (1994 <in> py) and (1 <in> is))
+#	1982-86 have paragraphs for each entry
+#	1987-   must break at "p. #"
+
+if ($#argv < 1) then
+	echo Usage: $0 args
+	exit -1
+endif
+set arg = $1
+
+#set root = http://www.vh.org/Vannier/imaging/IEEE
+set root = http://impulse.radiology.uiowa.edu/radiology/IEEE
+set dir = ~/l/web/bib/ieee,tmi
+
+#
+#	list of table of contents
+#
+set index1 = work/index1
+if (!(-e $index1) || $arg == list) then
+	if !(-e ~/tmp.t) then
+		set file = $root/IEEEcontents.html
+		netscape -remote "openURL($file)"
+		netscape -remote "saveAs(tmp.t, html)"
+	endif
+	cat ~/tmp.t | sed -e 's///' | joinline 'Volume' \
+		| grep vol_ | sed -e 's/ *<a href=".*IEEE\///' \
+		-e 's/December1997/December 1997/' \
+		-e 's/October1998/October 1998/' \
+		-e 's/">Volume/	/' \
+		-e 's/, Number /	/' \
+		-e 's/, /	/' \
+		-e 's/ /	/' \
+		-e 's:</a>.*$::' \
+		| awk '{print $5, $2, $3, $1, $4}' \
+		| sed -e 's/1989 7/1989 8/g' \
+		| sort \
+		>! $index1
+	echo 'done making index'
+exit
+endif
+
+
+#
+#	get raw toc for each issue from Iowa web
+#
+if ($arg == raw) then
+	if (-e ~/tmp.t) rm ~/tmp.t
+	foreach file (`awk '{print $4}' < $index1`)
+#		echo $file
+		set ifile = $root/$file
+		set year = (`grep $file $index1 | awk '{print $1, $2, $3}'`)
+		set vol = $year[2] 
+		set num = $year[3] 
+		set year = $year[1] 
+#		echo $year $vol $num
+		set ofile = `printf "$dir/raw/%d,%02d,%02d.raw" $year $vol $num`
+
+		if ((-e $ofile) || (-e $ofile.Z)) then
+			continue
+		else
+			echo doing $ofile
+		endif
+
+		if 1 then
+			netscape -remote "openURL($ifile)"
+			sleep 2
+			netscape -remote "saveAs(tmp.t, text)"
+			mv -i ~/tmp.t $ofile
+			sleep 1
+		endif
+	end
+exit
+endif
+
+#
+#	convert raw toc to .b2 format
+#
+if ($arg == tob2) then
+	foreach ifile (`ls $dir/raw/*.raw`)
+		set tmp = `basename $ifile .raw`
+		set year = (`echo $tmp | sed -e 's/,/ /g'`)
+		set vol = $year[2]; set num = $year[3]; set year = $year[1];
+		set obase = $year,$vol,$num.b2
+		set ofile = $dir/b2/$obase
+		echo $tmp $obase
+		if (-e $ofile) then
+			echo $ofile exists
+			continue
+		endif
+		if ($year > 1986) then
+			# break into "paragraphs" after page number
+			perl -pe 's/([0-9])$/$1\n/' < $ifile >! tmp.t
+			tmi,to,b2 tmp.t $year $vol $num unknown > $ofile
+		else
+			tmi,to,b2 $ifile $year $vol $num unknown > $ofile
+		endif
+		if 1 then
+			more $ofile
+			echo -n continue: ; set t = $<
+		endif
+	end
+exit
+endif
+
+#
+#	merge years together
+#
+if ($arg == merge) then
+	set year = 1982
+	while ($year <= 1997)
+		echo $year
+		cat b1/$year,??,??.b1 >! bib/tmi$year.b1
+		@ year++
+	end
+endif
+
+#
+#	create .bib files
+#
+if ($arg == bib) then
+	foreach ifile (bib/tmi*.b1)
+		set ofile = `basename $ifile .b1`.bib
+		b1,bib $ifile >! bib/$ofile
+	end
+endif
+
+exit #############################################################

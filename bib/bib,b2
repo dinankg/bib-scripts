@@ -1,0 +1,717 @@
+#!/usr/bin/perl -w
+# bib,b2
+# convert from BibTeX .bib file format to my .b2 file format:
+#
+# @a creator:01:xyz ieee-t-mi 1 2 3-4 jan 2001
+# A B Creator  D E Frenziedprof
+# Xylophone yearning zebra robs music store
+#
+# (for an article in volume 1 number 2 on pages 3-4 of the jan. 2000
+# issue of ieee transactions on medical imaging)
+# note that key is made from 1st letters of first 3 words of title (xyz)
+# double spaces to separate the authors, or ", " if no {}'s in authors
+#
+# at most double blank lines allowed between entries, i think
+
+$home = $ENV{HOME};
+$ssb = $home . '/l/src/script/bib/';
+require $ssb . 'author.pl';
+require $ssb . 'bibkey.pl';
+require $ssb . 'tolower.pl';
+
+use open ':encoding(utf8)';
+#use open ":encoding(iso-8859-7)";
+use open IO => ':encoding(utf8)';
+#use open IO => ":encoding(iso-8859-7)";
+use open ':std', ':encoding(UTF-8)';
+
+$do_nl = 0;
+
+$/ = "\n\n"; # slurp paragraph at time
+
+# First line of an entry has EntryType (abcdimpr), then "code";
+# subsequent lines have the following information depending on EntryType:
+#
+@Article	= ('journal', 'volume', 'number', 'pages', 'month');
+@Book		= ('publisher', 'address');
+@Conference	= ('booktitle', 'volume', 'pages');
+@Phdthesis	= ('school', 'address', 'month');
+@Incollection	= ('booktitle', 'editor', 'publisher', 'address', 'pages');
+@Misc		= ();
+@Proceedings	= ('publisher', 'address');
+@Techreport	= ('number', 'institution', 'address', 'month');
+
+@any	= ('title', 'year', 'abs', 'annote', 'errata', 'note', 'url', 'web');
+
+@killbrace = (@any, 'author', 'volume', 'number', 'month');
+
+# remove surrounding braces {} from these if no spaces within:
+@kill_brace_if_no_space =
+	('journal', 'booktitle', 'publisher', 'address', 'pages');
+
+%EntryType = (	'article',		'a',
+		'book',			'b',
+		'conference',		'c',
+		'phdthesis',		'd',
+		'incollection',		'i',
+		'inbook',		'i',
+		'misc',			'm',
+		'proceedings',		'p',
+		'techreport',		'r',
+		'unpublished',		'm');
+
+$fix_author = 0; # command-line flag so that user can apply &author()
+$fix_code = 0; # command-line flag so that user can fix code
+$do_title_lower = 0; # command-line flag so that user can "lower-case" title
+
+
+#
+# loop over files on command line
+#
+$firstfile = 1;
+foreach $file (@ARGV)
+{
+	if ($file eq "-fix_author")
+	{
+		$fix_author = 1;
+		next;
+	}
+
+	if ($file eq "-fix_code")
+	{
+		$fix_code = 1;
+		next;
+	}
+
+	if ($file eq "-title_lower")
+	{
+		$do_title_lower = 1;
+		next;
+	}
+
+	open(Bfile, $file) || die "Fail: cannot open `$file'";
+
+	print "\n" unless $firstfile;	# extra newline for later files
+	$firstfile = 0;
+
+	#
+	# loop over bibtex records
+	#
+	while (<Bfile>)
+	{
+#		print "before0: `$_'\n\n"; # debug
+
+		# check for leading BOM
+		# https://en.wikipedia.org/wiki/Byte_order_mark
+#		if (/^0xEF0xBB0xBF/)
+		if (/^\x{FEFF}/) # UTF-16 BE
+		{
+			s/.//; # remove bom
+		}
+
+		s///g; # kill cr	
+		s/^\@proceeding/\@conference/g;
+
+#		s/\x{E1}/\\'a/g; # á
+#		s/á/\\'a/g; # á
+
+		($nl_head) = /^(\n*)/;		# grab leading newlines
+		($nl_tail) = /\n(\n*)$/;	# grab trailing newlines
+		s/^[\s\n]+//;			# kill leading space/newlines
+		s/([\s\n]+)$//;			# kill trailing space/newlines
+
+		if (/^#/)
+		{
+			print "$nl_head$_$nl_tail\n"; # comment lines
+			next;
+		}
+
+		print $nl_head if ($do_nl & defined($nl_head));
+
+		s/\\&/&/g; # return \&'s to &
+		s/abstract\s*=/abs =/gi;
+
+#		if (/^\@\w+\s*\{[^\,\n]+,\n/) # @article{code, from web }\}
+		if (/^\@\w+\s*\{[^\,\n]+,/) # @article{code, from web }\}
+		{
+			s/\{/\{\n/; # \}\}
+#			print "debug0: `$_'\n"; exit; # debug
+		}
+
+		s/issn\s*=\s*\{[\w\-]+\},\n//i; # kill issn
+
+#		print "debug1: `$_'\n"; exit; # debug
+
+		next if /^$/; # skip if empty
+
+		# split based on lines (must re-merge multi-line cases below)
+		@_ = split(/\n/);
+
+		$type = shift(@_);	# type: article, book, etc.
+		$type =~ s/\s*@//;
+		$type =~ s/\s*\{.*//;	# \}
+		$type =~ tr/A-Z/a-z/;	# lower case
+#		print "type=`$type'\n\n"; # debug
+
+		# see if it is missing a code like some from the web are
+		@tmp = @_;
+		$tmp = shift(@tmp);
+		if ($tmp =~ /year=/)
+		{
+			$code = "xxx";
+		}
+		else
+		{
+			$code = shift(@_); # LastName:year:first_3_letters
+#			die("code") unless defined($code);
+			$code =~ s/\s*//;
+			$code =~ s/,$//;
+#			print "\ncode=`$code'\n\n"; # debug
+		}
+
+
+		# loop over lines in record
+		# fill "bib" associative array with keys and values
+		@record = @_;
+#		print "record0=`@record'\n"; # debug
+		undef(%bib);
+		undef($url_lines);
+		undef($web_lines);
+		undef($errata_lines);
+		undef($lines_note);
+		undef($annote_lines);
+		undef($lines_abs);
+#		undef($lines_title);
+		while ($_ = shift(@record))
+		{
+
+			# handle multi-line title
+			if ((/^\s*title\s*=\s*\{/) && !(/\},\s*/))
+			{
+				$lines = $_;
+				$lines =~ s/^\s*title\s*=\s*\{//; # \}
+#				die "lines=`$lines'\n" unless ($lines ne "");
+#				$lines = " $lines" if ($lines ne "");
+				$lines = "$lines\n";
+				while ($_ = shift(@record))
+				{
+					if (/\},/)
+					{
+						s/\},//;
+						$lines = $lines . $_;
+						last;
+					}
+					else
+					{
+						$lines = $lines . $_ . "\n";
+					}
+				}
+
+				if (1) # convert it to a single line
+				{
+					$lines =~ s/\n/ /g;
+					$bib{'title'} = $lines;
+				}
+
+				next;
+			}
+
+			# handle multi-line url differently
+			if ((/^\s*url\s*=\s*\{/) && !(/\},/))
+			{
+				$lines = $_;
+				$lines =~ s/^\s*url\s*=\s*\{//;
+				$lines = " $lines" if ($lines ne "");
+				$lines = "$lines\n";
+				while ($_ = shift(@record))
+				{
+					last if (/^\},/);
+					$lines = $lines . $_ . "\n";
+				}
+				$url_lines = $lines;
+				next;
+			}
+
+			# handle multi-line web differently
+			if ((/^\s*web\s*=\s*\{/) && !(/\},/))
+			{
+				$lines = $_;
+				$lines =~ s/^\s*web\s*=\s*\{//;
+				$lines = " $lines" if ($lines ne "");
+				$lines = "$lines\n";
+				while ($_ = shift(@record))
+				{
+					last if (/^\},/);
+					$lines = $lines . $_ . "\n";
+				}
+				$web_lines = $lines;
+				next;
+			}
+
+			# handle multi-line errata differently
+			if ((/^\s*errata\s*=\s*\{/) && !(/\},/))
+			{
+				$lines = $_;
+				$lines =~ s/^\s*errata\s*=\s*\{//;
+				$lines = " $lines" if ($lines ne "");
+				$lines = "$lines\n";
+				while ($_ = shift(@record))
+				{
+					last if (/^\},/);
+					$lines = $lines . $_ . "\n";
+				}
+				$errata_lines = $lines;
+				next;
+			}
+
+			# handle multi-line note differently
+			if ((/^\s*note\s*=\s*\{/) && !(/\},/))
+			{
+			if (0) # work in progress - passing @record fails
+			{
+#				print "record=`@record'\n"; # debug
+				($lines_note, @record) = &do_multi($_, @record);
+#				print "record=`@record'\n"; # debug
+			}
+			else
+			{
+#				print "record=`@record'\n"; # debug
+				$lines = $_;
+				$lines =~ s/^\s*note\s*=\s*\{//;
+				$lines = " $lines" if ($lines ne "");
+				$lines = "$lines\n";
+				while ($_ = shift(@record))
+				{
+					if (/\},/)
+					{
+						s/\},//;
+						$lines = $lines . $_;
+						last;
+					}
+					else
+					{
+						$lines = $lines . $_ . "\n";
+					}
+				}
+				$lines_note = $lines;
+				next;
+			}
+			} # if trick
+
+			# handle multi-line annote differently
+			if ((/^\s*annote\s*=\s*\{/) && !(/\},/))
+			{
+				$lines = $_;
+				$lines =~ s/^\s*annote\s*=\s*\{//;
+				$lines = " $lines" if ($lines ne "");
+				$lines = "$lines\n";
+				while ($_ = shift(@record))
+				{
+					last if (/^\},/);
+					$lines = $lines . $_ . "\n";
+				}
+				$annote_lines = $lines;
+				next;
+			}
+
+			# handle multi-line abstract differently
+			if ((/^\s*abs\s*=\s*\{/) && !(/\},/))
+			{
+#				print "data = `$_'\n"; exit;
+				$lines = $_;
+				$lines =~ s/^\s*abs\s*=\s*\{//;
+				$lines = " $lines" if ($lines =~ /^\w/);
+				$lines = "$lines\n";
+#				print "lines = `$lines'\n";
+#				print "record = `@record'\n"; # debug
+
+				if (!($lines =~ /\},$/)) # multi-line
+				{
+					while ($_ = shift(@record))
+					{
+						if (/\},/) # end
+						{
+							s/\},//;
+							$lines = $lines . $_;
+							last;
+						}
+						else
+						{
+							$lines = $lines . $_ . "\n";
+						}
+					}
+
+if (0)
+{
+					while ($_ = shift(@record))
+					{
+						if (/\},$/) # line ends
+						{
+							s/\},$/\n\},/;
+							$lines = $lines . $_ . "\n";
+							last;
+						}
+						last if (/^\},/);
+						$lines = $lines . $_ . "\n";
+					}
+}
+				}
+				$lines_abs = $lines;
+				$lines_abs =~ s/\},(\n)?$//;
+#				print "lines_abs = `$lines_abs'\n";
+#				print "record = `@record'\n";
+				next;
+			}
+
+			# kill single-line keywords = "keyword",
+			if (/^\s*keywords\s*=\s*\".*\"\s*\,?\s*/i)
+			{
+#				print "keywork = `$_'\n"; # debug
+				next;
+			}
+
+			# kill (possibly multi-line) keywords/issn
+			if (/^\s*(keywords|issnhide)\s*=\s*\{/i)
+			{
+#				print "keywork = `$_'\n"; # debug
+				next if (/\},/);
+				while ($_ = shift(@record))
+				{
+					last if (/\},/);
+				}
+				next;
+			}
+
+			# handle multi-line author (for downloaded .bib files)
+			if (/^\s*(author)\s*=\s*[\{\"]/i && !(/[\}\"],\s*$/))
+			{
+			#	die "todo author `$_'";
+				$lines = $_;
+				while ($_ = shift(@record))
+				{
+					$lines = "$lines $_";
+					last if ($lines =~ /[\}\"],$/);
+				}
+				$_ = $lines;
+			#	print "new author `$_'\n";
+			}
+
+			#
+			# if we get to here, it is *not* a multi-line case!
+			#
+			s/^\s*//;		# beginning white space
+			s/\s*$//;		# ending white space
+			s/,$//;			# ending ,
+			next if /^[{}]$/;	# skip ?
+
+			($key, $val) = /\s*(\w+)\s*=\s*\"?(.+)\"?/;
+			die "problem key `$_'" unless defined($key);
+			die "problem val `$_'" unless defined($val);
+			$key =~ tr/A-Z/a-z/;	# lower case key
+			$key =~ s/[{}]//;
+			$val =~ s/"$//;		# kill trailing "
+			$bib{$key} = $val;
+#			print "found $key `$val'\n"; # debug
+		}
+
+		# remove surrounding {}'s from most items
+		foreach $key (@killbrace)
+		{
+			if (defined($bib{$key}))
+			{
+				$_ = $bib{$key};
+				if (/^\{/ && /\}$/)
+				{
+					s/^[\{]//;
+					s/[\}]$//;
+				}
+				else
+				{
+					s/^"//;
+					s/"$//;
+				}
+				# print STDERR "key = `$key'\n";
+				$bib{$key} = $_;
+			}
+		}
+
+		foreach $key (@kill_brace_if_no_space)
+		{
+			if (defined($bib{$key}))
+			{
+				$_ = $bib{$key};
+				next if m/ /;
+				s/^[\{]*//;
+				s/[\}]*$//;
+				$bib{$key} = $_;
+			}
+		}
+
+		if ($bib{'pages'})
+		{
+			$bib{'pages'} =~ s/--/-/;
+			$bib{'pages'} =~ s/ //g;
+			$bib{'pages'} =~ s/\{([\d\-].*)\}/$1/; # {1-2} -> 1-2
+			$bib{'pages'} =~ s/n\/a\s*-\s*n\/a/?/;
+#			$bib{'pages'} =~ s/[\{\}]//g;
+		}
+
+		#
+		# "author" is actually editor for proceedings
+		#
+		if ($type eq 'proceedings')
+		{
+			die "EDITOR?" if ($bib{'editor'} eq '');
+			$author = $bib{'editor'};
+			delete $bib{'editor'};
+		}
+		else
+		{
+			if (!defined($bib{'author'}))
+			{
+				@_ = keys %bib;
+				print STDERR "Warn: skipping because no author: keys=`@_'\n";
+				foreach $key (@_)
+				{
+					print STDERR "key=$key value=`$bib{$key}'\n";
+				}
+				next;
+#				die "AUTHOR?";
+			}
+#			die "AUTHOR?" unless defined($bib{'author'});
+
+			$author = $bib{'author'};
+			if ($author eq "")
+			{
+				@_ = keys %bib;
+				print STDERR "Warn: skipping because empty author: keys=`@_'\n title=`$bib{'title'}'\n\n";
+				next;
+			}
+			delete $bib{'author'};
+		}
+		if ($fix_author)
+		{
+			$author = &author($author);
+		}
+		else
+		{
+			$author =~ s/ and/ /g; # ' and ' to '  '
+			$author =~ s/([A-Z])\. /$1 /g; # kill author punctuation
+		}
+
+		# what is this all about?
+		undef($Url);	$Url = $bib{'url'} if ($bib{'url'});
+		undef($Web);	$Web = $bib{'web'} if ($bib{'web'});
+		undef($Error);	$Error = $bib{'errata'} if ($bib{'errata'});
+		undef($Note);	$Note = $bib{'note'} if ($bib{'note'});
+		undef($Annote);	$Annote = $bib{'annote'} if ($bib{'annote'});
+		undef($Abs);	$Abs = $bib{'abs'} if ($bib{'abs'});
+
+		$type = 'proceedings' if ($type eq 'inproceedings');
+
+		if ($type eq 'article')		{ @Keys = @Article; }
+		elsif ($type eq 'book')		{ @Keys = @Book; }
+		elsif ($type eq 'conference')	{ @Keys = @Conference; }
+		elsif ($type eq 'phdthesis')	{ @Keys = @Phdthesis; }
+		elsif ($type eq 'incollection')	{ @Keys = @Incollection; }
+		elsif ($type eq 'inbook')	{ @Keys = @Incollection; }
+		elsif ($type eq 'misc')		{ @Keys = @Misc; }
+		elsif ($type eq 'proceedings')	{ @Keys = @Proceedings; }
+		elsif ($type eq 'techreport')	{ @Keys = @Techreport; }
+		elsif ($type eq 'unpublished')	{ @Keys = @Misc; }
+		else
+		{
+			die "Not implemented type=`$type'\n";
+		}
+
+		if (defined($bib{'month'}))
+		{
+			$bib{'month'} =~ s/[\. ]//g; # "dec. " -> "dec"
+		}
+
+		#
+		# Print first line, author, title
+		#
+		$line1 = "\@" . $EntryType{$type} . " " . $code;
+		foreach $key (@Keys)
+		{
+			if (defined($bib{$key}) && ($bib{$key} ne ''))
+			{
+				$line1 .= " ". $bib{$key};
+			}
+			else
+			{
+				$line1 .= " ?";
+			}
+		}
+
+		if (0) # debug
+		{
+			print "line1=`$line1'\n";
+			$tmp = $bib{'year'};
+			print "bibyear=`$tmp'\n";
+		}
+
+		if (defined($bib{'year'}))
+		{
+			$line1 .= " " . $bib{'year'};
+		} else {
+			$line1 .= " " . "todo";
+		}
+
+		# abbreviate
+		$line1 =~ s/\{IEEE Tr\. Im\. Proc\.\}/ieee-t-ip/;
+		$line1 =~ s/\{Access, IEEE}/ieee-access/;
+		$line1 =~ s/\{Biomedical Engineering, IEEE Transactions on\}/ieee-t-bme/;
+		$line1 =~ s/\{IEEE Journal of Selected Topics in Signal Processing\}/ieee-j-stsp/;
+		$line1 =~ s/\{IEEE Transactions on Automatic Control\}/ieee-t-ac/;
+		$line1 =~ s/\{IEEE Signal Processing Magazine\}/ieee-spmag/;
+		$line1 =~ s/\{IEEE Transactions on Biomedical Engineering\}/ieee-t-bme/;
+		$line1 =~ s/\{Computational Imaging, IEEE Transactions on\}/ieee-t-ci/;
+		$line1 =~ s/\{IEEE Transactions on Computational Imaging\}/ieee-t-ci/;
+		$line1 =~ s/\{?Mathematical Programming\}?/mathprog/;
+		$line1 =~ s/\{Medical Imaging, IEEE Transactions on\}/ieee-t-mi/;
+		$line1 =~ s/\{IEEE Transactions on Medical Imaging\}/ieee-t-mi/;
+		$line1 =~ s/\{IEEE Transactions on Neural Networks and Learning Systems\}/ieee-t-nnls/;
+		$line1 =~ s/\{IEEE Transactions on Radiation and Plasma Medical Sciences\}/ieee-t-rpms/;
+		$line1 =~ s/\{Image Processing, IEEE Transactions on\}/ieee-t-ip/;
+		$line1 =~ s/\{IEEE Transactions on Image Processing\}/ieee-t-ip/;
+		$line1 =~ s/\{IEEE Transactions on Information Theory\}/ieee-t-it/;
+		$line1 =~ s/\{IEEE Transactions on Signal Processing\}/ieee-t-sp/;
+		$line1 =~ s/\{Nuclear Science, IEEE Transactions on\}/ieee-t-ns/;
+		$line1 =~ s/\{Terahertz Science and Technology, IEEE Transactions on\}/ieee-t-tst/;
+		$line1 =~ s/\{Inverse Problems\}/invpro/;
+		$line1 =~ s/\{?Medical Physics\}?/mp/;
+		$line1 =~ s/\{Physics in Medicine and Biology\}/pmb/;
+		$line1 =~ s/\{?Journal of Magnetic Resonance Imaging\}?/jmri/;
+		$line1 =~ s/Journal of Magnetic Resonance/jmr/;
+		$line1 =~ s/\{?Journal of Nuclear Medicine\}?/jnm/;
+		$line1 =~ s/\{Magnetic Resonance in Medicine\}/mrm/;
+		$line1 =~ s/\{SIAM Journal on Computing\}/siam-jc/;
+		$line1 =~ s/\{SIAM Journal on Imaging Sciences\}/siam-jis/;
+		$line1 =~ s/\{SIAM Journal on Optimization\}/siam-jo/;
+		$line1 =~ s/\{SIAM\.* J.* Matrix Anal.* Appl.*\}/siam-jmaa/;
+		$line1 =~ s/\{SIAM Journal on Mathematical Analysis\}/siam-jma/;
+		$line1 =~ s/\{SIAM Journal on Mathematics of Data Science\}/siam-jmds/;
+		$line1 =~ s/\{SIAM Journal on Scientific Computing\}/siam-jsc/;
+		$line1 =~ s/\{SIAM J. Sci. Comput.\}/siam-jsc/;
+		$line1 =~ s/\{SIAM Review\}/siam-rev/;
+		$line1 =~ s/Journal of Visual Communication and Image Representation/jvcir/;
+		$line1 =~ s/[\{]*Medical Image Analysis\s*[\}]*/mia/;
+		$line1 =~ s/International Journal of Computer Vision\s*/ijcv /;
+		$line1 =~ s/\{J. Opt. Soc. Am. A\}/josaa/;
+		$line1 =~ s/\{Opt. Express\}/opex/;
+
+		die "TITLE?" if ($bib{'title'} eq '');
+		$bib{'title'} =~ s/[\{\}]*//g;
+
+		if ($do_title_lower)
+		{
+			$bib{'title'} = &TitleLower($bib{'title'});
+		}
+
+		if ($fix_code)
+		{
+			$fakeb2 = "$line1\n$author\n$bib{'title'}\n";
+			@bibkey = &bibkey($fakeb2);
+			($tmp_author, $tmp_year, $tmp_code) = @bibkey;
+			die "code" unless defined($tmp_code);
+			$newcode = "$tmp_author:$tmp_year:$tmp_code";
+			$line1 =~ s/$code/$newcode/;
+		}
+
+		print "$line1\n";
+		print "$author\n";
+		print "$bib{'title'}\n";
+
+		#
+		# Delete used keys to see if any left 
+		#
+		foreach $key (@Keys, @any)
+		{
+			delete $bib{$key};
+		}
+
+		#
+		# Extra entries
+		#
+		@extra = sort keys %bib;
+		if (@extra)
+		{
+			foreach $key (@extra)
+			{
+				if (0) # for spie
+				{
+					next if ($key eq "location");
+					next if ($key eq "numpages");
+					next if ($key eq "collaboration");
+					next if ($key eq "eid");
+					next if ($key eq "editor");
+					next if ($key eq "journal");
+					next if ($key eq "number");
+					next if ($key eq "publisher");
+				}
+
+				if ($bib{$key} =~ /^{/) # }
+				{ # remove braces
+					$bib{$key} =~ s/^{//;
+					$bib{$key} =~ s/}$//;
+				}
+				else
+				{
+					$bib{$key} =~ s/^"//;
+					$bib{$key} =~ s/"$//;
+				}
+				print "\@$key $bib{$key}\n";
+			}
+		}
+
+		#
+		# required order for multiline stuff:
+		# url, errata, note, annote, abstract
+		#
+		print "\@u $Url\n"		if $Url;
+		print "\@u$url_lines"		if $url_lines;
+		print "\@w $Web\n"		if $Web;
+		print "\@w$web_lines"		if $web_lines;
+		print "\@errat $Error\n"	if $Error;
+		print "\@errat$errata_lines"	if $errata_lines;
+		print "\@note $Note\n"		if $Note;
+		print "\@note$lines_note"	if $lines_note;
+		print "\@an $Annote\n"		if $Annote;
+		print "\@an$annote_lines"	if $annote_lines;
+		print "\@abs $Abs\n"		if $Abs;
+		print "\@abs$lines_abs\n"	if $lines_abs;
+
+		if ($do_nl)
+		{
+			print $nl_tail if defined($nl_tail);
+		}
+		else
+		{
+			print "\n";
+		}
+	}
+	close(Bfile);
+}
+
+
+#
+# handle multi-line entry
+# does not work right now - cannot figure out how to pass @record
+#
+sub do_multi {
+	local($lines, @rec);
+	$lines = $_[0];
+	@rec = $_[1]; # todo?
+print "rec=`@rec'\n"; # debug
+	$lines =~ s/^\s.*\w+ = \{//;
+	$lines = " $lines" if ($lines ne "");
+	$lines = "$lines\n";
+	while ($_ = shift(@rec))
+	{
+		last if (/^\},/);
+		$lines = $lines . $_ . "\n";
+	}
+	return($lines, @rec);
+}

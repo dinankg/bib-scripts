@@ -1,0 +1,9 @@
+# notes
+
+# b,grep ieee-t-mi mr*get*.b1 | perl -ne 'print unless /----/'
+
+# fix ismrm lines
+# perl -pe 's,http://cds.ismrm.org/,,; s/-/ /; s,/[fF]iles/, ,; s/\.pdf//'
+# perl -pe 's,http://cds.ismrm.org/,,; s/-/ /; s,/, ,; s/\.pdf//; s/\.PDF//
+
+https://learnxinyminutes.com/docs/julia/

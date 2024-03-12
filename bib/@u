@@ -1,0 +1,136 @@
+#!/bin/csh
+# @u
+# convert my shorthand into complete url
+# u spie volume
+# u ieee isNumber arNumber
+# u doi doi
+# ...
+# otherwise just echo arguments
+
+if ($#argv < 1) then
+	echo "Usage: $0 type args"
+	exit -1
+endif
+
+if (`hostname` == fessler17.local) then
+#	set browser = safari
+	set browser = Firefox-3.0.app
+#else if (`hostname` == jf11.local) then
+#	set browser = safari
+else
+	set browser = firefox
+endif
+
+#set brow_arg = "-a $browser"
+set brow_arg = ""
+
+if (`uname` == Darwin) then
+	alias open "/usr/bin/open $brow_arg" # mac
+else
+	alias open "firefox" # for linux systems
+endif
+
+# trick: try to convert old ieee to doi!
+if ("$1" == "ieee") then
+	doi,ieee $2 $3
+exit
+endif
+
+# see if line is of "doi" type; such lines may need proxy if non-umich
+set url = "$argv[*]"
+set hasdoi = `echo "$url" | perl -ne 'print 1 if (/doi/ | /jstor/)'`
+set opendoi = 1
+if ("$hasdoi" == 1 && $#argv == 3) then # @u doi number -
+	set url = "$argv[1-3]" # purge "-" at end
+	set opendoi = 0
+endif
+
+#echo $url
+#echo $hasdoi
+#echo $opendoi
+
+# convert @u line to a url
+set fessler = ~fessler/l/src/script/bib/at_u.pl
+#echo $fessler
+set url = `echo "$url" \
+	| perl -pe 'require "'$fessler'"; $_ = &u2url($_);' `
+#	| perl -pe '$home = $ENV{HOME}; require $home . "/l/src/script/bib/at_u.pl"; $_ = &u2url($_);' `
+echo "$url"
+
+# replace prox: prefix in url, if any
+set hasprox = `echo "$url" | perl -ne 'print 1 if /prox:/'`
+if ("$hasprox" == 1) then
+	set noglob
+	if (`hostname` == ird) then
+		set url = `echo "$url" | perl -pe 's/prox/http/'`
+	else
+		set url = `echo "$url" \
+			| perl -pe 's,prox:,http://proxy.lib.umich.edu/login\\?url=http:,'`
+	endif
+	echo "$url"
+endif
+
+# proxy for doi
+if ("$hasdoi" == 1) then
+	if ($opendoi && (`hostname` == ird || `hostname` == ire)) then # .umich.edu
+		open "$url"
+	else
+		set noglob
+		set url = 'http://proxy.lib.umich.edu/login?url='"$url"
+#		echo "doi url = '$url'"
+		echo "$url"
+#		open $brow_arg http://proxy.lib.umich.edu/login?url="$url"
+		if ($opendoi) then
+			open "$url"
+		endif
+	endif
+
+exit
+	set url = `echo "$url" \
+		| perl -pe 'print "http://proxy.lib.umich.edu/login\\?url="'`
+endif
+
+set isosa = `echo "$url" | perl -ne 'print 1 if /opticsinfobase|ovid/'`
+if ("$isosa" == 1) then
+	if (`hostname` == ird) then
+		open "$url"
+	else
+		set noglob
+		set url = http://proxy.lib.umich.edu/login?url="$url"
+		echo "$url"
+#		open $brow_arg http://proxy.lib.umich.edu/login?url="$url"
+		open "$url"
+	endif
+exit
+endif
+
+set has_www = `echo "$url" | perl -ne 'print 1 if /^www/'`
+if ($has_www) then
+	set url = http://"$url"
+	echo "$url"
+endif
+
+set has_http = `echo "$url" | perl -ne 'print 1 if /http/'`
+if !($has_http) then
+	echo "$url"
+	exit
+endif
+
+if 0 then # for occasional work without prompt
+	open "$url"
+else
+	echo "$url"
+	echo -n "open? y[n]: "
+	if ($< == "y") then
+		open "$url"
+	endif
+endif
+
+# u mp vol num (a fake url to help find Med Phys papers)
+# trick:
+#if ("$1" == "mp") then
+#	set vol = $2
+#	set num = $3
+#	set url = 'http://ojps.aip.org/dbt/dbt.jsp?KEY=MPHYA6&Volume='$vol'&Issue='$num
+#else
+#endif

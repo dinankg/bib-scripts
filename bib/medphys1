@@ -1,0 +1,89 @@
+#!/bin/csh -e
+# medphys1
+# extract medical physics from web site
+# http://ojps.aip.org/dbt/dbt.jsp?KEY=MPHYA6&Volume=30&Issue=3
+# 6 issues per year up to 1993, 12 after that
+# caution: should be run from within the directory of the journal!
+
+if ($#argv >= 1) then
+	set year1 = $1
+else
+	set year1 = 0
+endif
+
+set urlbase = 'http://ojps.aip.org/dbt/dbt.jsp?KEY=MPHYA6&' # Volume=15&Issue=1
+
+if ($year1 == 0) then
+	set year = 1974
+	set year = 2008; # did all previous years
+else
+	set year = $year1
+endif
+
+#
+# loop over years
+#
+while (1)
+	set yr = `echo $year | sed -e 's/..//'`
+
+	if !(-d $yr) mkdir $yr
+
+	if ($year <= 1993) then
+		set nissue = 6
+	else
+		set nissue = 12
+	endif
+
+	#
+	# get toc of each issue and convert
+	#
+	set issue = 0
+	while ($issue < $nissue)
+		@ issue += 1
+
+		set out = $yr/$issue
+		if (-e $out) then
+			echo $out done already
+			continue
+		endif
+
+		set vol = `echo $year - 1973 | bc`
+
+		#
+		# get toc
+		#
+
+		set url = "$urlbase"Volume=$vol'&Issue='$issue
+		set tmp = /tmp/t,medphys.htm
+		if 1 then
+			lynx -source "$url" > $tmp
+		endif
+
+		# stop on first partial issue or unavailable issue
+		set done = `cat $tmp | perl -ne 'print "1" if /partial issue/ || /unable to fulfill your request/ || /pp\. 1-\<BR\>/'`
+		if ("$done" == 1) then
+			echo "$0 : $url"
+			echo "$0 : stopped, page not-available or partial"
+			/bin/rm $tmp
+			exit -1
+		break
+		endif
+
+		# month
+		set mon = `cat $tmp | perl -ne 'if (/<title>Medical Physics\s*--/) { s/<title>Medical Physics\s*--\s*(\S*) .*/\1/; print; }'`
+		set mon = `echo $mon | month,lower,3`
+
+		echo "year=$year mon=$mon url=$url"
+
+		cat $tmp \
+			| medphys2 $vol $issue $mon $year mp \
+		> $out
+
+		sleep 0 # since now we only incrementally update
+		/bin/rm $tmp
+	end
+	@ year += 1
+
+	# quit if only one year requested
+	if ($year1 != 0) exit
+end

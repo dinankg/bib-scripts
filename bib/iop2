@@ -1,0 +1,171 @@
+#!/bin/csh -e
+# iop2
+# iop2 -thisyear # only this year, not previous
+# iop2 1 # for debug
+# for each IoP year, get all issues and convert
+
+set debug = 0
+set ask = 1
+set thisyearonly = 0
+if ($#argv > 0) then
+	if ("$1" == "-thisyear") then
+		set thisyearonly = 1
+	else
+		set debug = $1
+	endif
+endif
+
+set exe = "`basename $0` :"
+alias note "echo $exe "
+
+# journal abbreviation from directory tail
+set jour = `pwd | perl -pe 's:.*/::'`
+
+# start in current year and work backwards
+
+set most_recent_vol = `/bin/ls -r vol | head -1`
+# note $most_recent_vol; exit
+set year = `cat vol/$most_recent_vol | awk '{print $4}' | head -1`
+#set year = `date +%Y`
+#note "year = $year"; exit
+set tmpyear = "/tmp/t,iop2,year=$year"
+
+while (1)
+	# extract relevant "url/vol/num num month year" from volume files
+	cat vol/* | perl -ne "print if /$year /" >! $tmpyear
+
+	# find maximum number
+	set nline = `cat $tmpyear | wc -l`
+
+	if ($nline == 0) then
+		note "done before year $year"
+		exit 0
+	endif
+
+	note "jour=$jour year=$year nissue=$nline"
+
+	# loop over issues for this year
+	while ($nline >= 1)
+		set line = (`tail -n $nline $tmpyear | head -1`)
+		@ nline -= 1
+
+		# url for this issue is first string on line
+		set url = $line[1]
+		set num = $line[2]
+		set mon = $line[3]
+
+		set vol = `echo "$url" | perl -pe 's,.*\/(\d*)\/\d*\s.*,$1,'`
+
+		if !(-d $year) mkdir $year
+
+		set num2 = `printf "%02d" $num`
+		set out = $year/$vol,$num2,$mon # output file for issue
+
+		if (-e $out) then
+			note "$out already done"
+			continue
+		else
+			note "vol=$vol num=$num url=$url starting out=$out"
+		endif
+
+		set tmp1 = /tmp/t,iop2a,$vol,$num.htm
+		set tmp2 = /tmp/t,iop2b,$vol,$num.htm
+		set tmp3 = /tmp/t,iop2c,$vol,$num.txt
+		if (!($debug) || !(-e $tmp1)) then
+			lynx -source "$url" >! $tmp1
+		else
+			note "reusing lynx download $tmp1"
+		endif
+
+		set bad = `cat $tmp1 | perl -ne 'print "1" if /This issue is not yet closed/'`
+		if ("$bad" != "") then
+			note "skipping since incomplete current issue"
+			/bin/rm $tmp1
+			continue
+		endif
+
+		# set entrystart = '<a href=\"\/article\/10.1088\/'
+		set entrytitlekey = 'class=\"art-list-item-title\">'
+		# set entrystart = 'class=\"art-list-item-title\">'
+		# set entrystart = '<a href=\"\/article\/10.1088\/.*art-list-item-title'
+		# note "$entrystart"
+
+		# parse it to make one line per article entry
+		if (0 || !($debug) || !(-e $tmp2)) then
+			# echo hi
+			cat $tmp1 \
+			# merge all lines, cut extra white space \
+			| perl -pe 'undef $/; s/\s+/ /g' \
+			# newlines to start each paper \
+			| perl -pe 's/(<a href=\"\/article\/10.1088\/\d+-\d+\/\d+\/\d+\/[ELNR\d]+\" )/\n\1/g' \
+			| grep "$entrytitlekey" \
+			# junk before doi (and insert newline for each paper) \
+			| perl -pe 's/<a href=\"\/article\//\n/' \
+			# junk after doi before title (insert newline) \
+			| perl -pe 's/\" class=\".*-title\"> /\n/' \
+			# junk between title and authors (insert newline) \
+			| perl -pe 's/<\/a>.*art-list-item-meta\">/\n/' \
+			# junk between authors and abstract (insert newline) \
+			| perl -pe 's/<\/p>.*view-text-small\">/\n/' \
+			# junk at end after abstract \
+			| perl -pe 's/<\/div>.*//' \
+			>! $tmp2
+		endif
+
+		if (0 && $debug) then
+			more $tmp2; exit
+		endif
+
+		if (1 || !($debug) || !(-e $tmp3)) then
+			cat $tmp2 | iop3 >! $tmp3
+		endif
+
+		if (0 && $debug) then
+			more $tmp3; exit
+		endif
+
+		# look for stray html codes with '&...;' in them
+		set bad = `cat $tmp3 | perl -ne 's/ \& //g; print "1" if /\&.*\;/'`
+		if ("$bad" != "") then
+			note "html conversion incomplete. see $tmp3"
+			note "vi $tmp3"
+			exit -1
+		endif
+
+		# final conversion step
+		set tmp4 = /tmp/t,iop2d
+		cat $tmp3 \
+			| iop4 $vol $num $mon $year $jour \
+			>! $tmp4
+
+		if (0 && $debug) then
+			more $tmp4; exit
+		endif
+
+		mv $tmp4 $out
+
+		/bin/rm $tmp1 $tmp2 $tmp3
+		sleep 2
+	end
+
+	@ year -= 1
+
+	if ($thisyearonly || $debug) then
+		break
+	endif
+
+	# see if user wants to continue
+	if ($ask) then
+		note -n "continue back to year $year? [n]: "
+		set yn = $<
+		if ("$yn" == "Y") then
+			set ask = 0
+			continue
+		endif
+		if ("$yn" != "y") then
+			break
+		endif
+	endif
+end
+
+/bin/rm $tmpyear

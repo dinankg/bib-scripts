@@ -1,0 +1,23 @@
+#!/bin/csh -e
+# ismrm
+# get papers from ismrm online
+
+set art = $1
+
+# this lynx config file allows cookies from wiley with "wrong" domain
+set lynx = 'lynx -auth=09914:Noll -cfg ~/l/src/script/rc/lynxrc'
+# -accept_all_cookies -cookies -cookie_file=FILENAME
+
+if ($#argv > 1) then
+	set year = $2
+else
+	set year = `date +%Y`
+endif
+
+set url = http://cds.ismrm.org/ismrm-$year/files/0${art}.pdf
+echo "$url"
+
+$lynx -dump "$url" > ismrm,$year,$art.pdf
+exit
+$lynx "$url"
+$lynx -source "$url" > $tmp1

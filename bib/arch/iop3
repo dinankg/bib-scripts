@@ -1,0 +1,86 @@
+#!/usr/bin/perl -w
+# iop3
+# convert iop html format to a basic format: page\ntitle\nauthor\n@u doi (doi)
+# (html piped in from iop2)
+#
+# typical input line (no line break):
+#
+# 1581 Title :AUTHOR: Authors :URL: # /0031-9155/55/15/L02"
+
+# old way:
+# 1581 Title </a> <span class="author">Authors</span> <span class="doi">
+# doi: <a href="http://doi.org/10.1088/0031-9155/55/15/L02"
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/htmlaccent.pl';
+
+#$/ = "\n\n"; # slurp paragraph at time
+
+$first = 1;
+
+#$jour = $ARGV[0];
+
+while (<STDIN>)
+{
+	next if /reviewed by/;
+	next if /Editorial developments/;
+	next if /Introduction to the 25th Anniversary Issue of/i; # invpro 25 12 dec 2009
+	next if /Author index with titles/;
+
+	s/ /\n/; # newline between page and title
+
+	# remove some extra junk
+	s'<span class="boxBut free-article">OPEN ACCESS</span>'';
+	s'<a href="/collections\?collection_type=LATEST_PAPERS"><span class="boxBut free-article">FREE ARTICLE</span></a>'';
+	s'<span class="boxBut free-article">FREE ARTICLE</span>'';
+	s'<a href="/collections\?collection_type=FEATURED_ARTICLES"><span class="boxBut free-article">FEATURED ARTICLE</span></a>'';
+
+	s'<a href="/collections\?collection_type=PHYSICS_REVIEWS"><span class="boxBut physics-reviews">REVIEW ARTICLE</span></a>'';
+	# newline between title and author, also adding keyword to be sure:
+#	s/<\/a>\s+<span class="author">/\nAUTHOR /;
+	s/ :AUTHOR: /\nAUTHOR /;
+
+	# newline between title and doi, adding doi prefix too:
+#	s/<\/span> <span class="doi">\s+<a href="http:\/\/doi.org\//\n\@u doi /;
+	# 2013-10-15 they removed doi from main page; must infer from "view" link
+#	s/<\/span> <span class="viewingLinks"> <a class="icon evol" href="\//\n\@u doi 10.1088\//;
+#	s/\/article">View article<\/a>.*//; # extra junk
+#	s/\/article">View article<\/a>.*//; # extra junk
+	s/ :URL: /\n\@u doi 10.1088/;
+
+	$_ = &htmlaccent($_); # convert html accents
+
+	s/–/-/g; # replace utf-8 dash with normal dash!
+	s/\"\>.*//; # cut remaining html
+
+	if (0)
+	{
+		# construct the doi url from:
+		# <a title="abstract: 0031-9155/49/14/002" href= ...
+		if (/title="abstract/i)
+		{
+			($url) = /\"[Aa]bstract: ([^\"]*)\"/;
+			$url = "\@u doi 10.1088/$url\n";
+		}
+		else
+		{
+			$url = "";
+		}
+
+		s/\<.*tocTitle\"\>\s*/\n/;	# newline between page and title
+		s/\<.*tocAuth\"\>\s*/\nAUTHOR /; # newline between title, author
+	}
+
+	s/\<.*//;			# cut remaining html
+
+	print "\n" unless $first;	# paragraph separator
+	$first = 0;
+	s/\n\n$/\n/;
+	print "$_"; 
+#	print "$url"; 
+
+	if (/doi:/)
+	{
+		die "iop3 processing incomplete";
+	}
+}

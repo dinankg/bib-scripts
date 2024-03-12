@@ -1,0 +1,84 @@
+#!/bin/perl -w
+# b1,tex,tmi
+# convert tmi*.b1 files to a tmi.tex file
+# usage: name of all files to be databased '+' name of tmi files
+
+$/ = ""; # slurp paragraph at time
+
+# read in the .b1 files that are to be "databased"
+# meaning we keep the key and the filename for each
+
+$done = 0;
+foreach $file (@ARGV)
+{
+	if ($file eq "+") { $done = 1; }
+	next if ($done == 1);
+#	continue if ($file eq "+");
+#	die "how to break" if ($file eq "+");
+
+	$name = $file;
+	$name =~ s%.*\/%%g;
+	$name =~ s/\.b1//;
+	print STDERR "file $name\n";
+
+	open(File, $file);
+	while (<File>) {
+		chop;
+		next if (/^#/);		# skip comment lines
+		($cite, $author, $title, @extra) = split(/\n/); # input lines
+		($type, $code, $line1) = $cite =~ /(\S+)\s+(\S+)\s+(.*)/;
+		die "already $code $cite" if defined($list{$code});
+		$list{$code} = $name;
+	}
+	close(File);
+}
+
+
+# read tmi files
+$doing = 0;
+foreach $file (@ARGV)
+{
+	if ($file eq "+") { $doing = 1; next; };
+	next unless($doing == 1);
+#	break if ($file eq "+");
+
+	print STDERR "tmi-tex $file\n";
+	open(File, $file);
+	$n = 0;
+	$name = $file;
+	$name =~ s%.*\/%%;
+	$name =~ s/\.b1//;
+	print "\\file{$name}\n";
+
+	while (<File>)
+	{
+		chop;
+		next if (/^#/); # skip comment lines
+		$n = $n + 1;
+		undef $cite; undef $author; undef $title; undef @extra;
+		undef $type; undef $code; undef $line1; undef @line1;
+		undef $journal; undef $volume; undef $number;
+			undef $pages; undef $month; undef $year;
+
+		($cite, $author, $title, @extra) = split(/\n/); # input lines
+		die "title $_" unless defined($title);
+		($type, $code, $line1) = $cite =~ /(\S+)\s+(\S+)\s+(.*)/;
+		die "line1 $cite" unless defined($line1);
+		@line1 = split(/  /, $line1);
+
+		die "type $type" unless ($type eq '@a');
+		($journal, $volume, $number, $pages, $month, $year) = @line1;
+		die "year $cite" unless defined($line1);
+		die "journal $journal" unless ($journal eq "ieee-t-mi");
+
+		$author =~ s/  /, /g;
+
+		print "\\tmi";
+		if (defined($list{$code})) {
+			print "ref{$list{$code}}";
+		}
+		print "\{$n\}{$volume}{$number}{$pages}{$month}{$year}\n{$author}\n{$title}\n";
+	}
+
+	close(File);
+}

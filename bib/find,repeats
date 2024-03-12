@@ -1,0 +1,23 @@
+#!/usr/bin/perl -w
+#	find,repeats
+#	find repeated words
+
+foreach $file (@ARGV) {
+	open(File, $file) || die "cannot open $file";
+
+	$previous = "";
+	$line = 0;
+	while (<File>) {
+		$line = $line + 1;
+
+		@_ = split(/\s/);
+#		print "`@_'\n";
+
+		while($_ = shift(@_)) {
+			if ($_ eq $previous) {
+				print "$file $line `$_'\n";
+			}
+			$previous = $_;
+		}
+	}
+}

@@ -1,0 +1,14 @@
+#!/bin/csh -e
+# spie
+# open given spie conf volume
+# http://spiedl.aip.org/dbt/dbt.jsp?KEY=PSISDG&Volume=3978&Issue=1
+
+if ($#argv <= 1) then
+	echo "Usage: $0 vol"
+endif
+set vol = $1
+
+set urlbase = 'http://spie.org/Publications/Proceedings/Volume/'
+set url = "$urlbase"$vol#'&Issue=1'
+echo "$url"
+open "$url"

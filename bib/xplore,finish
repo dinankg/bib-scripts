@@ -1,0 +1,114 @@
+#!/usr/bin/perl -w
+# xplore,finish
+# following xplore,to,b2 pre-processing,
+# finish converting from IEEE xplore html format to my .b format
+
+$home = $ENV{HOME};
+$ssb = $home . '/l/src/script/bib/';
+require $ssb . 'author.pl';
+require $ssb . 'tolower.pl';
+require $ssb . 'author.pl';
+require $ssb . 'bibkey.pl';
+require $ssb . 'htmlaccent.pl';
+
+$/ = "\n\n"; # slurp paragraph at time
+
+#
+# journal citation info
+#
+$cite0 = $ARGV[0];
+#print "cite0=`$cite0'\n\n";
+
+while (<STDIN>)
+{
+	next if /Abstracts of Manuscripts/;
+	next if /Author Index/;
+	next if /Back cover/;
+	next if /Books received/;
+	next if /call for papers/;
+	next if /Edics/;
+	next if /Erratum/;
+	next if /Front cover/;
+	next if /IEEE .* Society Information/;
+	next if /IEEE International Conference/i;
+	next if /Information for Authors/i;
+	next if /List of Reviewers/;
+	next if /Notice to Readers/i;
+	next if /Page\(s\): 0- 0/;
+	next if /publication information/i;
+	next if /Special Issue on/i;
+	next if /Table of Contents/i;
+	next if /^Contributors\n/;
+	next if /IEEE International Symposium/;
+	next if /IEEE Membership Application\n/;
+	next if /blank page\n/;
+	next if /^\s+$/;
+
+#	print "`$_'\n";
+
+	#
+	# parse: title author pages doi url
+	#
+
+#	($title) = /\<strong\>(.*)\<\/strong\>/;
+#	($title) = /(.*)\<\/strong\>/; # before 2009-09-14
+	($title, $rest) = /(.*)\<\/div\>\<br\>(.*)/;
+	die "title `$_'" unless defined($title);
+	$title = &htmlaccent($title);
+	$title =~ s/R\&D/R\\&D/g;
+	$title =~ s/tips\&tricks/tips\\&tricks/ig;
+	$title =~ s/\<e1\>//g;	# cut mysterious modifier
+	$title =~ s/\<\/e1\>//g;
+
+	$_ = $rest;
+	next if ($rest =~ /^ Page\(s\)\:/); # need non-empty author
+#	($author) = /\<\/strong\>(.*)Page\(s\)/; # before 2009-09-14
+	($author, $rest) = /(.*)\<br\> (Page\(s\)\:.*)/;
+	die "author `$_'" unless defined($author);
+
+	$author =~ s/^\<br\>\s*//;
+	$author =~ s/\<br\>\s*$//;
+
+	next unless ($author =~ /\w/); # need non-empty author
+
+	$_ = $rest;
+	($pages) = /Page\(s\)\:\&nbsp\;\s?([^\<]*)\<br\>/;
+	die "pages `$_'" unless defined($pages);
+
+	$pages =~ s/\s*//g;	# purge extra spaces in pages line
+
+	($doi) = /Digital Object Identifier (10\..*)\<br\>/;
+
+	if (defined($doi)) {
+#		die "doi `$_'" unless defined($doi);
+		$url = "\@u doi $doi";
+	}
+	else {
+#		pre 2.1 way: 
+		($isnum, $arnum) = /isnumber=(\d+).*arnumber=(\d+)/;
+		die "arnum `$_'" unless defined($arnum);
+		$url = "\@u ieee $isnum $arnum";
+	}
+
+#	print "`$title'\n";
+#	print "`$author'\n";
+#	print "`$pages'\n";
+
+	$title = &TitleLower($title); # ???? T-MI needs this?
+	$author = &author($author);
+
+	die "bug" if $pages =~ /ieee/;
+
+	$fake = "\@a xx:xx:xx $cite0\n$author\n$title\n";
+	@bibkey = &bibkey($fake);
+	($author1, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author1:$year:$code";
+
+	$cite = $cite0;
+	$cite =~ s/ pppp / $pages /;
+
+	print "\n\@a $key $cite\n";
+	print "$author\n$title\n";
+	print "$url\n";
+}

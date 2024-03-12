@@ -1,0 +1,283 @@
+#!/bin/perl -w
+#	tmi,to,b2
+#	convert from T-MI raw .txt file to .b2 file
+
+#	parse input arguments
+($file, $iyear, $ivol, $inum, $imonth) = (@ARGV);
+die "args" unless defined($imonth);
+$ivol = $ivol + 0;
+$inum = $inum + 0;
+#print "file=$file\nyear=$iyear vol=$ivol num=$inum month=$imonth\n";
+
+#	slurp paragraph at time
+$/ = "";
+
+
+sub tolower {
+	local($tmp) = $_[0];
+	$tmp =~ tr/A-Z/a-z/;
+	return $tmp;
+}
+
+#	return 1 if the string looks like author, e.g. "J Fessler"
+sub isauthor {
+	local($tmp) = $_[0];
+	return 1 if ($tmp =~ /[A-Z]\..*[A-Z]/);
+	return 0;
+}
+
+#	leave these words capitalized
+@caps = ('American', 'Bayesian', 'Born', 'Carlo', 'Compton', 'Doppler', 'Fourier', 'Gibbs', 'Hachimura-Kuwahara', 'Hartley', 'Johann', 'Markov', 'Monte', 'Poisson', 'Radon', 'Shinnar', 'Smith', 'Tesla', 'Wiener', 'X-ray');
+
+%Month = ('january',	'jan',
+	'february',	'feb',
+	'march',	'mar',
+	'april',	'apr',
+	'may',		'may',
+	'june',		'jun',
+	'july',		'jul',
+	'august',	'aug',
+	'september',	'sep',
+	'october',	'oct',
+	'november',	'nov',
+	'december',	'dec');
+
+
+open(Tfile, $file);
+
+#
+#	Loop over entries in file
+#
+$first = 1;
+while (<Tfile>) {
+
+	exit if /Virtual Hospital Home/;
+	exit if /ANNOUNCEMENTS/;
+	exit if /JOURNAL CONTENTS/;
+	exit if /BOOK REVIEW/;
+	exit if /IEEE Copyright Form/;
+	exit if /ERRATA/;
+	exit if /INDEX/;
+
+	next if /---------/;
+	next if /^$/;
+	next if /^Home/;
+	next if /^Journal Contents/;
+	next if /IEEE Transactions on Medical Imaging/;
+	next if /PAPERS/;
+	next if /Editorial/;
+	next if /CORRESPONDENCE/;
+	next if /^Correspondence/;
+	next if /Editor's [Nn]ote/;
+	next if /EDITORIAL/;
+	next if /REPORT from the Editor/;
+	next if /^   o Discussion\n/;
+	next if /^X-Ray Fluoroangiography$/;
+	next if /^Digital Mammography/;
+	s/O?Sullivan/O'Sullivan/;
+
+	#
+	#	get year etc. from first real line
+	#
+	if ($first) {
+#		print "in=:$_:";
+		# parse volume, number, month, year
+		($vol, $num, $mon, $year) =
+			/Volume MI-(\d+), Number (\d+), (\w+) (\d+)/;
+		if (!defined($year)) {
+			($mon, $year, $vol, $num) =
+			/(\w+) (\d+), Volume [MI-]*(\d+), Number (\d)/;
+		}
+		if (!defined($year)) {
+			($mon, $year, $vol, $num) =
+			/(\w+)[ ,]*(\d+)[ ,]*Volume [MI-]*(\d+), Issue (\d)/;
+		}
+		if (!defined($year)) {
+			print STDERR "in=:$_:\n";
+			die "year";
+		}
+		$mon = &tolower($mon);
+		die "bad month $mon" unless defined($Month{$mon});
+		die "year? $year $iyear $file" unless ($year == $iyear);
+		die "vol?" unless ($vol == $ivol);
+		die "num? in=$_" unless ($num == $inum);
+		$mon = $Month{$mon};
+		$first = 0;
+	#	print "vol=$vol num=$num mon=$mon year=$year\n";
+
+		$jour = "ieee-t-mi $vol $num";
+		$date = "$mon $year";
+		next;
+	}
+
+	chop;
+	s/p\.p\./p./g;			# p.p. to p.
+	s/J> Llacer/J. Llacer/;		# a typo
+	@lines = split(/\n/);
+	$nline = $#lines + 1;
+	next if ($nline == 1);
+
+	# is the 1st line a subject heading? (short and 2nd line is not author)
+	if ((length($lines[0]) < 50) && !&isauthor($lines[1])) {
+		printf STDERR "heading '$lines[0]'\n";
+		shift(@lines);
+		$nline--;
+	}
+
+	# long title?
+	while ($nline > 2 && !&isauthor($lines[1])) {
+		$tmp = shift(@lines);
+		$lines[0] = $tmp . " " . $lines[0];
+		$nline--;
+	}
+
+	die "author '$_'\n'$lines[1]'" unless &isauthor($lines[1]);
+
+	#	first line is title, remaining are authors and page
+	$title = shift(@lines);
+	$auth = join(" ", @lines);
+	$page = $auth; $page =~ s/.*p\.\s*([0-9]*)/$1/;
+	$auth =~ s/\s+p\.\s*[0-9]*//;
+	$auth =~ s/ *([A-Z])/$1/;
+#	print STDERR "'$_'\n";
+#	print STDERR "auth='$auth' page='$page'\n";
+
+if (0) {
+	if ($nline == 5) {
+		# is the 2nd line some authors?
+		if (&isauthor($lines[1])) {
+			$lines[1] .= " " . $lines[2] . " " . $lines[3] . " " . $lines[4];
+			$nline = 2;
+		}
+		elsif (&isauthor($lines[2])) {
+			$lines[0] .= " " . $lines[1];
+			$lines[1] = $lines[2] . " " . $lines[3] . " " . $lines[4];
+			$nline = 2;
+		}
+		else {
+			$lines[0] .= " " . $lines[1] . " " . $lines[2];
+			$lines[1] = $lines[3] . " " . $lines[4];
+			$nline = 2;
+		}
+	}
+
+	if ($nline == 4) {
+		# is the 2nd line some authors?
+		if (&isauthor($lines[1])) {
+			$lines[1] .= " " . $lines[2] . " " . $lines[3];
+			$nline = 2;
+		}
+		else {
+			$lines[0] .= " " . $lines[1];
+			$lines[1] = $lines[2] . " " . $lines[3];
+			$nline = 2;
+		}
+	}
+
+	if ($nline == 3) {
+		!($lines[1] =~ /p\. \d/) || die "nl=$nline, p1 @lines\n";
+		($lines[2] =~ / \d/) || die "nl=$nline, p2 @lines\n";
+		# is the middle line some authors?
+		if (&isauthor($lines[1])) {
+			$lines[1] .= " " . $lines[2];
+		}
+		else {
+			$lines[0] .= " " . $lines[1];
+			$lines[1] = $lines[2];
+		}
+		$nline = 2;
+	}
+
+	if ($nline == 2) {
+#		print "`$_'\n";
+		$title = $lines[0];
+		$auth = $lines[1];
+		$page = $lines[1];
+		$page =~ s/.*p\. ([0-9]*)/$1/;
+		$auth =~ s/\s+p\. [0-9]*//;
+		$auth =~ s/ *([A-Z])/$1/;
+#		print "auth='$auth' page='$page'\n";
+	}
+	else {
+		print STDERR "nline = $nline, @lines\n";
+		next;
+	}
+}
+
+	#
+	#	title
+	#
+#	$title =~ s/    o //;
+	$title =~ s/^\s*o //;
+	$title =~ s/\s+/ /g;
+	next if ($title eq "Discussion");
+	next if ($title =~ /^Correction to /);
+#	print "title='$title'\n";
+
+	#	 protect words with ZZZ at front
+	for (@caps) {
+		if ($title =~ /$_/) {
+			$title =~ s/($_)/ZZZ$1/g;
+		}
+	}
+
+	($title1, $title) = $title =~ /\s*(\w+)(.*)/;
+	$title =~ s/ A / a /g;	# for maximum A posteriori
+	$title =~ s/([- ][A-Z][a-z])/&tolower($1)/ge;
+
+	$title = $title1 . $title;
+	$title =~ s/ZZZ//g;		# clear out caps-protecting ZZZ
+
+	$title =~ s/90û/90/;			# a typo?
+	$title =~ s/reconvery/recovery/;	# a typo
+
+	#
+	#	author
+	#
+	$auth =~ s/ \s+/ /g;		# extra spaces
+	$auth =~ s/\374/u/g;		# for ü
+	$auth =~ s/\. / /g;
+	$auth =~ s/\.-/-/g;
+	$auth =~ s/\./ /g;
+	$auth =~ s/,\s+[aA]nd\s+/  /g;
+	$auth =~ s/\s+[aA]nd\s+/  /g;
+	$auth =~ s/, /  /g;
+
+	# extract title key from title
+	$tmp = $title;
+	$tmp =~ s/, / /g;     	# replace ', ' with just ' ' in title
+	$tmp =~ s/[\(\)\'\`\$\"]//g;    # eliminate punctuation
+	($t1, $t2, $t3) = split(/[ -\/]/, $tmp);
+	$t1 =~ s/(.).*/$1/;
+	if (!defined($t2)) {
+		die "tmp=$tmp\n";
+	}
+	$t2 =~ s/(.).*/$1/;
+	if (!defined($t3)) {
+		$tkey = "$t1$t2";
+	} else {
+		$t3 =~ s/(.).*/$1/;
+		$tkey = "$t1$t2$t3";
+	}
+	$tkey =~ tr/A-Z/a-z/;
+
+	$akey = $auth;
+	$akey =~ s/De Pierro/depierro/;		# for De Pierro
+	$akey =~ s/van Giessen/vangiessen/;	# "
+	$akey =~ s/([a-z])-([A-Z])/$1$2/g;	# for Daube-Witherspoon
+	$akey =~ s/-/ /g;
+	$akey =~ s/[A-Z] //;
+	$akey =~ s/[A-Z] //;
+	$akey =~ s/[A-Z] //;		# remove up to 3 initials
+	$akey =~ s/([A-Za-z]) .*/$1/;	# last name of 1st author
+	$akey =~ tr/A-Z/a-z/;		# uncap
+	$akey =~ s/'//;			# no quotes in o'sullivan
+	$ykey = $year - 1900;
+	$key = "$akey:$ykey:$tkey";
+	$pages = "$page";
+	print "\@a $key $jour $pages $date\n";
+	print "$auth\n";
+	print "$title\n\n";
+}
+
+close(Tfile);

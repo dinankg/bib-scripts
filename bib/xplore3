@@ -1,0 +1,208 @@
+#!/bin/csh -ef
+# xplore3
+# grab single xplore issue (all pages) using lynx,
+# convert by calling xplore,to,b2
+# caution: should be run while sitting in the directory of interest.
+#
+# typical url:
+# http://ieeexplore.ieee.org/xpl/tocresult.jsp?asf_arn=null&asf_iid=5371922&asf_pun=null&asf_in=null&asf_rpp=null&asf_iv=null&asf_sp=null&asf_pn=1
+
+# 2014-06
+# url for first 25 papers:
+# http://ieeexplore.ieee.org/xpl/tocresult.jsp?isnumber=6710262&punumber=78
+# url for first 999 papers:
+# http://ieeexplore.ieee.org/xpl/tocresult.jsp?sortType%3Dasc_p_Sequence%26filter%3DAND%28p_IS_Number%3A6710262%29&rowsPerPage=50&pageNumber=1&resultAction=REFINE&resultAction=ROWS_PER_PAGE&isnumber=6710262
+# url concise:
+# open 'http://ieeexplore.ieee.org/xpl/tocresult.jsp?rowsPerPage=999&isnumber=6710262'
+
+alias note "echo `basename $0` :"
+
+if ($#argv < 4) then
+	note "usage: year vol issue_file isnum [debug]"
+	note "year is 4 digit, issue_file is usually 1 to 12, isnum is ....."
+	exit -1
+endif
+set year = $1
+set vol = $2
+set issue_file = $3
+set isnum = $4
+
+if ($#argv > 4) then
+	set debug = 1; # for testing
+else
+	set debug = 0
+endif
+
+set yr = `echo $year | perl -pe 's/^19(\d\d)/\1/; s/^20(\d\d)/\1/'`
+set file_final = $yr/$issue_file
+set file_final0 = $yr/0$issue_file
+if (!($debug) && ((-e $file_final) || (-e $file_final0))) then
+	note "$file_final or $file_final0 already exists"
+	exit 0
+endif
+
+set base = \
+	'http://ieeexplore.ieee.org/xpl/tocresult.jsp?rowsPerPage=999&isnumber='
+set url = "$base$isnum" # 2014
+
+
+# 2016-09-29 use henning scraper
+set issue2 = `printf '%02d' $issue_file`
+~/src/contrib/henning/scraper/phantomjs ~/src/contrib/henning/scraper/IEEE.js "$url" $yr/$issue2.bib
+exit
+
+
+# 2014-06
+# unfortunately the toc page does not have doi etc, so resort to opening
+# the issue in browswer and then hand extracting the bib
+open "$url"
+exit
+
+
+# loop over pages until no more; dump all first, to parse later
+set page = 1
+#set numpage = 1000 # old, not needed because of rowsPerPage option!
+set numpage = 1 # 2014-06
+while ($page <= $numpage)
+	set tmp_dir = .
+	set tmp_raw = $tmp_dir/t,x3,raw,$yr,$issue_file,$isnum,p=$page.htm
+	set tmp_cite = $tmp_dir/t,x3,cite,$yr,$issue_file,$isnum,p=$page.htm
+
+	# url for this page of TOC
+#	set url = "$base$isnum&page=$page"
+#	set url = `printf "$base" $isnum $page` # old
+	set url = "$base$isnum" # 2014
+
+#	if ($page > 0) then
+#		set start = `echo "25 * $page" | bc -l`
+#		set url = "$url&ResultStart=$start"
+#	endif
+
+	note "issue_file=$issue_file isnum=$isnum page=$page url below:"
+
+	if (($debug) || !(-e $tmp_raw)) then
+		note "$url"
+		urlsrc "$url" | perl -pe 's/^M//g' >! $tmp_raw
+	endif
+
+	# parse htm for this issue
+
+	cat $tmp_raw \
+		# merge to one big line \
+		| perl -pe 's/[\r\n\t]+/ /g' \
+		# merge spaces \
+		| perl -pe 's/\s+/ /g' \
+		# split by '<li ' \
+		| perl -pe 's/\<li /\n<li /g' \
+		# keep articles only \
+		| perl -ne 'print if /^\<li aria-describedby=\"art-abs-title/' \
+		| more
+exit
+
+	set ok = `cat $tmp_raw | perl -ne 'print "1" if /abs_all.jsp/'`
+	if ("$ok" == "") then
+		note "$ok"
+		note "no abs_all in $tmp_raw"
+		rm -i $tmp_raw
+		exit -1
+	endif
+
+	if ($page == 1) then
+		# find last page; page buttons look like:
+		# javascript:gotoPage('3')">3<
+		set numpage = `cat $tmp_raw | perl -pe 's/[\r\n\t]+/ /g' | perl -pe 's/.*gotoPage\(...\)..//' | perl -pe 's /\<.*//'`
+		note "numpage = $numpage"
+		if ("$numpage" == "") then
+			echo "could not find numpage; check $tmp_raw"
+			exit -1
+		endif
+	endif
+
+	@ page += 1
+	sleep 1
+endif
+
+exit
+
+	set has_cover = `cat $tmp_raw | perl -ne 'print "1" if /cover_images/'`
+
+	if ("$has_cover" != 1) then
+		note "issue appears incomplete (no cover image)"
+		if ($page != 0) then
+			note "not on page 0???"
+#			exit -1
+			note "warning, assuming out of pages"
+			break
+		endif
+		note "warning, continuing anyway"
+#		/bin/rm $tmp_raw
+#		exit 0
+	endif
+
+# todo: do this before parsing
+set file_work = x3-work
+
+echo "# $yr $issue_file $isnum" > $file_work
+echo "" >> $file_work
+
+	# determine how many continuation pages
+	# since in x2.0, no way to distinguish error page from end page
+	set hasnext = 0
+	if ($page == 0) then
+		# sometime there are so many pages that there is a "Next" link
+		set hasnext = `cat $tmp_raw | perl -ne 'if (/Next \&gt\;/) {print "1"}'`
+		if ("$hasnext" != "") then
+			set pages = 22; # large value
+		else
+			set pages = `cat $tmp_raw | xplore3,pages`
+		endif
+		note "pages=$pages in $tmp_raw"
+	endif
+
+	# see if error page
+	set done = `cat $tmp_raw | perl -ne 'print "1" if (/Error Page/)'`
+	if ("$done" == 1 && "$hasnext" == 0) then
+		note "ieee error page on url=$url"
+		exit -1
+		break
+	endif
+
+	# see if last page (for cases with Next>)
+	set done = `cat $tmp_raw | perl -ne 'print "1" if (/No data available in database/ | /Your request cannot be processed/)'`
+	if ("$done" == 1 && "$hasnext" == 1) then
+		note "done"; echo ""
+		break
+	endif
+
+	# determine journal volume issue month year
+	cat $tmp_raw | xplore3,cite >! $tmp_cite
+	set cite = "`cat $tmp_cite`"
+	note "cite = $cite"
+
+	note "converting into $file"
+	if ($debug) then
+		cat $tmp_raw | xplore,to,b2 "$cite"; exit -1	# for testing
+	else
+		cat $tmp_raw | xplore,to,b2 "$cite" >> $file_work
+	endif
+	wc $file_work
+
+	/bin/rm $tmp_raw $tmp_cite
+
+	# done if last continuation page
+	if ($page == $pages) break
+
+	@ page += 1
+	sleep 1
+end
+
+# look for stray html codes with '&' in them
+set bad = `cat $file_work | perl -ne 's/ \& //g; print "1" if /[^\\]\&/'`
+if ("$bad" != "") then
+	note "html conversion incomplete. see $file_work"
+	echo "vi $file_work"
+	exit -1
+endif
+
+# on success, save it
+mv -i $file_work $file_final

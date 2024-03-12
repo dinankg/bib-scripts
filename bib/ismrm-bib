@@ -1,0 +1,32 @@
+#!/bin/csh -e
+# ismrm-bib
+
+# convert 2009 ismrm .bib into my .b2
+
+cat $1 \
+	| sed -e 's/\@inproceedings/\@conference/g' \
+	| sed -e 's/{Proceedings 13th Scientific Meeting, International Society for Magnetic Resonance in Medicine, Seattle}/ismrm/g' \
+	| sed -e 's/Abstract = /abs = /g' \
+	| perl -pe 's/\{2009\} \}/2009\n\}/g' \
+	| ismrm-author-fix \
+	| cat -s \
+	>! ti
+
+	bib,b2 ti > 2009.b2
+
+exit
+
+# convert 2008 ismrm .bib into my .b2
+
+cat $1 \
+	| sed -e 's/\@inproceedings/\@conference/g' \
+	| sed -e 's/{Proceedings 16th Scientific Meeting, International Society for Magnetic Resonance in Medicine, Toronto}/ismrm/g' \
+	| sed -e 's/Abstract = /abs = /g' \
+	| perl -pe 's/\{2008\} \}/2008\n\}/g' \
+	| ismrm-author-fix \
+	| cat -s \
+	>! ti
+
+	bib,b2 ti
+#	| sed -e 's/\{2008\}/2008/g'
+

@@ -1,0 +1,73 @@
+#!/usr/bin/perl -w
+# ismrm14,finish
+# format entries based on html parsing of ismrm14
+# each paragraph is:
+# ZZ1 (time) number.
+# authors
+# @an affiliations
+# @abs abstract
+
+$year4 = 2014;
+
+$home = $ENV{HOME};
+$bib = $home . '/l/src/script/bib/';
+require $bib . 'tolower.pl';
+require $bib . 'author.pl';
+require $bib . 'bibkey.pl';
+require $bib . 'htmlaccent.pl';
+
+#$/ = "\n\n"; # slurp paragraph at time
+$/ = ""; # slurp paragraph at time
+
+while (<STDIN>) {
+#	print "\n`$_'\n";
+
+	if (/^#/) {
+		print $_;
+		next;
+	}
+
+#	next if (/^#$/); # blank line
+
+	($page, $title, $auth, $abs, $an) = split(/\n/);
+	next unless defined($auth) && ($auth =~ ' '); # need at least 3
+#	print "\nauth=`$auth'\n";
+
+
+#	die "bad `$_'\n" unless defined($auth);
+
+	die "page `$page'\n `$_'" unless ($page =~ /^ZZ1 /);
+	$page =~ s/ZZ1 //;
+	$page =~ s/.* //;
+	$page =~ s/\.$//;
+
+	$auth =~ s/, M\.D\.//;
+	$auth =~ s/, Ph\.D\.//;
+	$auth =~ s/, M\.R\.C\.P\.//;
+	$auth =~ s/, F\.R\.C\.R\.//;
+
+	$auth =~ s/, \d,/,/g;
+	$auth =~ s/\d,/,/g;
+	$auth =~ s/\d$//;
+	$auth =~ s/, +/, /g;
+
+	$auth = &author($auth);
+	$auth =~ s/,  /  /g;
+	$auth =~ s/,$//;
+	$auth =~ s/,\}/\}/;
+	print STDERR "auth `$auth'\n" if ($auth =~ /,/);
+
+	$title = &TitleLower($title);
+
+	$cite = "ismrm . $page $year4";
+	$fake = "\@c xx:xx:xx $cite\n$auth\n$title";
+	@bibkey = &bibkey($fake); 
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	print "\n\@c $key $cite\n";
+	print "$auth\n$title\n";
+	print "$abs\n" if defined($abs);
+	print "$an\n\n" if defined($an);
+}

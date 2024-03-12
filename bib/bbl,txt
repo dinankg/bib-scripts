@@ -1,0 +1,29 @@
+#!/bin/perl -w
+#	debbl
+#	strip bibtex/tex junk from a .bbl file
+
+$/ = "";	# paragraphs
+
+foreach $file (@ARGV) {
+	print STDERR "$file\n";
+	open(File, $file);
+	while (<File>) {
+		chop;
+		s/\\begin.*//;
+		s/\\end.*//;
+		s/\\bibitem.*//;
+		s/{//g;
+		s/}//g;
+		s/~/ /g;
+		s/\\em//g;
+		s/\\newblock //g;
+		s/\\onweb//g;
+		s/\n/  /g;
+		s/^\s+//g;
+		s/ \s+/ /g;
+
+		next if (/^$/);
+		print "$_\n\n";
+	}
+	close(File);
+}

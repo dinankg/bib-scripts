@@ -1,0 +1,11 @@
+#!/usr/bin/perl -w
+# do-ct-16
+# authors, title, email
+
+while (<STDIN>)
+{
+	($author, $title, $email) = split(/,/);
+	die "bad line:\n`$_'\n" unless defined($email);
+
+	print "$author\n$title\n$email\n";
+}

@@ -1,0 +1,7 @@
+#!/bin/csh -e
+# scrape2
+# call web scraper scrape1 multiple times
+
+foreach arg ($*)
+	scrape1 $arg
+end

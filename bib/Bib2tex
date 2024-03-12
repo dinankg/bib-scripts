@@ -1,0 +1,25 @@
+#!/bin/sh
+#	sh script to generate a short latex document
+#	that can be latexed for printing bibliographies
+#	Usage: command file.bib
+
+file=`basename $1 .bib`
+
+echo '\documentstyle{article}'
+echo '\setlength{\textwidth}{6.5in}'
+echo '\setlength{\textheight}{9.0in}'
+echo '\input{size_cent}'
+echo '\begin{document}'
+#echo "$file \hfill \today \hfill Fessler"
+#modification time: (different on sun and ibm)
+#mod=`/bin/ls -l $file.bib | awk '{print $6,$7,$8}'`
+#echo "$file \\hfill ($mod)" '\\'today "\\hfill Fessler"
+mod=`/bin/ls -l $file.bib | awk '{print $5,$6,$7}'`
+echo "$file \\hfill ($mod)" '\'today "\\hfill Fessler"
+echo '\nocite{*}'
+echo '\bibliographystyle{unsrt}'
+#echo '\\''bibliography{abbrev,'$file'}'
+echo '\''bibliography{abbrev,'$file'}'
+echo '\end{document}'
+#cat <<'END-OF-FRAGMENT3'
+#END-OF-FRAGMENT3

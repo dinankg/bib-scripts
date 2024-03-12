@@ -1,0 +1,43 @@
+#!/bin/csh -e
+# osadoi
+# convert "@u osa ..." to a "@u doi"
+
+set tmp = /tmp/tmp-osadoi
+#set tmp = ~/tmp1.htm
+
+set in = (`cat`)
+
+# determine doi from volume and page
+if ($in[1] == "@a") then
+	set jour = $in[3]
+	set vol = $in[4]
+	set pages = $in[6]
+	set page = `echo $pages | perl -pe 's/\-.*//'`
+
+	if ($jour == josaa) then
+		echo -n '@u doi 10.1364/JOSAA.'$vol'.'
+		printf "%06d\n" $page
+		echo "$in"
+	else
+		echo "$in"
+		echo "not done"
+		exit -1
+	endif
+exit
+endif
+
+set in = ($in[2-])
+
+# convert @u line to a url
+set fessler = ~fessler/l/src/script/bib/at_u.pl
+set url = `echo $in | perl -pe 'require "'$fessler'"; $_ = &u2url($_);' `
+
+#echo "url = $url"; exit
+
+lynx -source "$url" >! $tmp
+
+echo -n "@u doi "
+cat $tmp \
+	| perl -ne 'print if /"doi:/' \
+	| perl -pe 's/.*doi://' \
+	| perl -pe 's/"\>//'

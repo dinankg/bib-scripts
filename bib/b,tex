@@ -1,0 +1,81 @@
+#!/usr/bin/perl -w
+# b,tex
+# convert .b files into a .tex file with indexed entries flagged.
+# Usage:
+#	ls {files to be "indexed"} | b,tex {files in printed list}
+# The "printed list" is usually from tex/biblio/jour/*,
+# the "indexed list" is usually from tex/biblio/b2/*.
+# Jeff Fessler
+
+$/ = ""; # slurp paragraph at time
+
+# get list of "indexed" files from stdin
+@files = split(/\n/, <STDIN>);
+die "no files requested" if ($#files < 0);
+
+#
+# for each of the .b files that are to be "indexed"
+# read in and keep the only key and the filename.
+# fix: flag ",get"
+#
+foreach $file (@files) {
+#	print "file $file\n";
+
+	$name = $file;
+	$name =~ s/.*\///g;	# remove directory path
+	$name =~ s/\..*$//;	# and suffix
+	print STDERR "file $name\n";
+
+	open(File, $file) || die "cannot open file $file";
+
+	while (<File>) {
+		chop;
+		next if (/^#/);		# skip comment lines
+		($cite, $author, $title, @extra) = split(/\n/); # input lines
+		($type, $code, $line1) = $cite =~ /(\S+)\s+(\S+)\s+(.*)/;
+		die "already $code $cite" if defined($list{$code});
+		$list{$code} = $name;
+	}
+	close(File) || die "cannot close $file";
+}
+
+#
+# read files to be printed
+#
+foreach $file (@ARGV) {
+
+	print STDERR "b,tex $file\n";
+	open(File, $file) || die "cannot open file $file";
+	$n = 0;
+	$name = $file;
+#	$name =~ s/.*\///;
+	$name =~ s/\.\.\/ieee\///; # fix: broaden
+	$name =~ s/\..*$//;	# and suffix
+	print "\\file{$name}\n";
+
+	while (<File>) {
+		chop;
+		next if (/^#/);		# skip comment lines
+		$n = $n + 1;
+
+		($cite, $author, $title, @extra) = split(/\n/); # input lines
+		defined($title) || die "title `$_'";
+
+		($type, $code, $line1) = $cite =~ /(\S+)\s+(\S+)\s+(.*)/;
+		defined($line1) || die "line1 `$cite'";
+		($type eq '@a') || die "type `$type'";
+
+		@line1 = split(/\s/, $line1);
+		($journal, $volume, $number, $pages, $month, $year) = @line1;
+		defined($year) || die "year `$cite'\n`@line1'";
+
+		$author =~ s/  /, /g;
+
+		print "\\paper";
+		print "\[$list{$code}\]" if (defined($list{$code}));
+		print "\{$n\}{$journal}{$volume($number):$pages}{$month}{$year}";
+		print "\n{$author}\n{$title}\n";
+	}
+
+	close(File);
+}

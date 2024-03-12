@@ -1,0 +1,63 @@
+#!/usr/bin/perl -w
+# do-title-author-place
+# convert one or more entries having 3 lines each: title \n author(s) \n place
+# # also supports an option number preceding the title line
+
+$cite0 = '@c';
+$cite1 = 'ismrm-ml2 . . 2018';
+
+$home = $ENV{HOME};
+$bib = $home . '/l/src/script/bib/';
+require $bib . '/tolower.pl';
+require $bib . '/author.pl';
+require $bib . '/bibkey.pl';
+
+$/ = ""; # slurp paragraph at time
+
+while (<STDIN>)
+{
+	if (/^#/) # echo comments
+	{
+		print "$_\n";
+		next;
+	}
+
+	@all = split(/\n/);
+	$nline = $#all + 1;
+
+	$offset = 0;
+	if (/^\d/) { # digit
+		$nline -= 1;
+		$offset += 1;
+	}
+
+#	die "bad paragraph ($nline):\n`$_'\n" unless ($nline == 3);
+	die "bad paragraph ($nline):\n`$_'\n" unless ($nline >= 3);
+
+	$title = $all[0+$offset];
+	$authors = $all[1+$offset];
+	$place = $all[2+$offset];
+
+	$title =~ s/^\"//;
+	$title =~ s/\"$//;
+
+	$authors =~ s/\([^\)]*\)//g; # remove (institution)
+	$authors =~ s/, and /, /g; # handle 'and'
+	$authors =~ s/ and /, /g;
+
+	$authors = &author($authors);
+	$title = &TitleLower($title);
+
+	$fake = "$cite0 xx:xx:xx $cite1\n$authors\n$title\n";
+	@bibkey = &bibkey($fake); 
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	$cite = $cite1;
+
+	print "$cite0 $key $cite\n";
+	print "$authors\n$title\n";
+	print "\@an $place\n";
+	print "\n";
+}

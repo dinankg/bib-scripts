@@ -1,0 +1,58 @@
+#!/usr/um/bin/perl
+#	kill cap in key
+
+#	slurp paragraph at time
+$* = 1;
+$/ = "";
+
+foreach $file (@ARGV) {
+	open(TRY, $file);
+	while (<TRY>) {
+		chop;
+#		print "$_\n";		# replicates file
+
+		@_ = split(/\n/);
+
+		$_ = shift(@_);
+#		s/:([0-9][0-9]):/\1,/;	# change : to comma, but doesn't work with bibtex!
+
+s/^@([A-Z])  A/@\1  a/;
+s/^@([A-Z])  B/@\1  b/;
+s/^@([A-Z])  C/@\1  c/;
+s/^@([A-Z])  D/@\1  d/;
+s/^@([A-Z])  E/@\1  e/;
+s/^@([A-Z])  F/@\1  f/;
+s/^@([A-Z])  G/@\1  g/;
+s/^@([A-Z])  H/@\1  h/;
+s/^@([A-Z])  I/@\1  i/;
+s/^@([A-Z])  J/@\1  j/;
+s/^@([A-Z])  K/@\1  k/;
+s/^@([A-Z])  L/@\1  l/;
+s/^@([A-Z])  M/@\1  m/;
+s/^@([A-Z])  N/@\1  n/;
+s/^@([A-Z])  O/@\1  o/;
+s/^@([A-Z])  P/@\1  p/;
+s/^@([A-Z])  Q/@\1  q/;
+s/^@([A-Z])  R/@\1  r/;
+s/^@([A-Z])  S/@\1  s/;
+s/^@([A-Z])  T/@\1  t/;
+s/^@([A-Z])  U/@\1  u/;
+s/^@([A-Z])  V/@\1  v/;
+s/^@([A-Z])  W/@\1  w/;
+s/^@([A-Z])  X/@\1  x/;
+s/^@([A-Z])  Y/@\1  y/;
+s/^@([A-Z])  Z/@\1  z/;
+		print	"$_\n";
+#		($type, $code, @line1) = split(/  /, shift(@_));
+#		($type, $code, @line1) = split(/  /);
+
+		if (1) {
+			for (@_) {
+				print	"$_\n";
+			}
+			print	"\n";
+		}
+	}
+
+	close(TRY);
+}

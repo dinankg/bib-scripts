@@ -1,0 +1,30 @@
+# b,doc
+# documentation for .b format
+#
+#	cdtbb
+#	grep -h '^@' * | awk '{print $1}' | sort -u
+
+publication type:
+
+@a article
+@b book
+@c conference
+@d phdthesis
+@i incollection
+@m misc
+@p proceedings
+@r techreport
+
+other:
+
+@an	annotation
+@editor
+@isbn
+@note	note
+@organization
+@part
+@series
+@u	url
+@volume
+
+@pm	pmcid

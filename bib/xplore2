@@ -1,0 +1,116 @@
+#!/bin/csh -e
+# xplore2 [year] [-noask] [-thisyear]
+# loop over each issue downloaded by xplore1 into isnum/year,
+# caution: should be run while sitting in the directory of interest.
+
+alias note "echo `basename $0` :"
+
+if !(-d isnum) then
+	note "run xplore1 first"
+exit -1
+endif
+
+# years in 4-digit reverse order
+set years = `/bin/ls isnum | tac`
+#	| perl -pe 's/^9/199/; s/^../200/; s/^1/201/' \
+#	| sort -nr`
+#note "$years"
+
+set ask = 1
+set thisyear = 0
+while ($#argv)
+	if ("$1" == "-noask") then
+		set ask = 0
+	else if ("$1" == "-thisyear") then
+		set thisyear = 1
+	else
+		set years = $1
+	endif
+	set argv = ($argv[2-])
+end
+
+
+# loop over years
+foreach year ($years)
+	set yr = `echo $year | perl -pe 's/^19(\d\d)/\1/; s/^20(\d\d)/\1/'`
+#	note "year=$year yr=$yr"
+
+	if !(-d $yr) mkdir $yr
+	set isnum_file = isnum/$year
+
+	# how many issues?
+	set n_issue = `cat $isnum_file | wc -l`
+
+	note "year=$year yr=$yr n_issue=$n_issue"
+
+	# loop over issues
+	set issue_last = 0
+	set part = 1
+	set is = 0
+	while ($is < $n_issue)
+		@ is += 1
+
+		set line = \
+			(`head -n $is $isnum_file | tail -n 1`)
+		if ($#line == 0) then
+			echo "blank line in isnum_file $isnum_file"
+			break
+		endif
+		if ($#line != 3) then
+			echo "bad line in isnum_file $isnum_file"
+			exit -1
+		endif
+
+		if 0 then # old
+			set vol = $line[1]
+			set issue = $line[2]
+			set isnum = $line[3]
+		else # 2014-06
+			set isnum = $line[1]
+			set vol = $line[2]
+			set issue = $line[3]
+		endif
+#		note "vol=$vol issue=$issue isnum=$isnum"
+
+		# if the "issue" is like 10-2, then the "part" is there already
+		set has_part = `echo $issue | perl -pe 'print "1" if (/-/)'`
+		if ("$has_part" == 1) then
+			set part = 0; # if one has it, they all should!
+			set issue_file = $issue
+
+		else if ($issue == $issue_last) then
+			if ($part == 0) then
+				echo "error: if one issue has part, all should!"
+				exit -1
+			endif
+			@ part += 1
+			set issue_file = $issue-$part
+		else
+			set part = 1
+			set issue_file = $issue
+		endif
+
+		set issue_last = $issue
+#		note isnum=$isnum issue=$issue part=$part issue_file=$issue_file
+
+		note "xplore3 $year $vol $issue_file $isnum"
+		xplore3 $year $vol $issue_file $isnum
+	end
+
+	# see if user wants to continue
+	if ($thisyear) then
+		break
+	endif
+
+	if ($ask) then
+		echo -n "continue back prior to year $year? yY[n]: "
+		set yn = $<
+		if ("$yn" == "Y") then
+			set ask = 0
+			continue
+		endif
+		if ("$yn" != "y") then
+			break
+		endif
+	endif
+end

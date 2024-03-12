@@ -1,0 +1,257 @@
+#!/usr/bin/perl -w
+# bib,b1
+# convert from BIBTEX .bib files to my .b1 files
+
+$/ = "\n\n"; # slurp paragraph at time
+
+# First line of an entry has EntryType (A,B,R,etc.), then "code", then
+# the following information depending on EntryType:
+
+@Article	= ('journal', 'volume', 'number', 'pages', 'month');
+@Book		= ('publisher', 'address');
+@Conference	= ('booktitle', 'volume', 'pages');
+@Phdthesis	= ('school', 'address', 'month');
+@Incollection	= ('booktitle', 'editor', 'publisher', 'address', 'pages');
+@Misc		= ();
+@Proceedings	= ('publisher', 'address');
+@Techreport	= ('number', 'institution', 'address', 'month');
+
+@any		= ('title', 'year', 'abs', 'annote', 'error', 'note');
+
+%EntryType = (	'article',		'a',
+		'book',			'b',
+		'conference',		'c',
+		'phdthesis',		'd',
+		'incollection',		'i',
+		'misc',			'm',
+		'proceedings',		'p',
+		'techreport',		'r');
+
+#print "args=@ARGV\n";
+
+	$check_keys_only = 0;
+	$Line1spacer = '  ';
+
+#
+#	Loop over files on command line
+#
+$firstfile = 1;
+foreach $file (@ARGV) {
+#	print "$file:\n";
+	open(Bfile, $file);
+
+	print "\n" unless $firstfile;	# extra newline for later files
+	$firstfile = 0;
+
+	#
+	#	Loop over bibtex records
+	#
+	while (<Bfile>) {
+		($nl_head) = /^(\n*)/;		# grab leading newlines
+		($nl_tail) = /\n(\n*)$/;	# grab trailing newlines
+		s/^\n+//;			# remove leading newlines
+		s/(\n+)$//;			# remove trailing newlines
+
+		if (/^#/) {
+			print "$nl_head$_$nl_tail\n";	# comment lines
+			next;
+		}
+
+		print $nl_head if $nl_head;
+
+		s/\\&/&/g;		# return \&'s to &
+		@_ = split(/\n/);
+		$type = shift(@_);
+		$type =~ s/@//;
+		$type =~ s/{//;		# Article,Book,etc. #}
+		$type =~ tr/A-Z/a-z/;	# small letters
+		$code = shift(@_);
+		$code =~ s/\s*//;
+		$code =~ s/,$//;	# LastName:Year:first_3_letters
+#		print "type = `$type'	code = `$code'\n";
+		undef(%bib);
+
+		#
+		#	Loop over lines in record
+		#	Fill "bib" array with keys and values
+		#
+		@record = @_;
+		undef($abslines);
+		undef($errorlines);
+		while ($_ = shift(@record)) {
+#		for (@_) {}
+
+			# handle multi-line abstracts differently
+			if (/^\tabs = {$/) {
+				$abslines = '';
+				while ($_ = shift(@record)) {
+					last if (/^},/);
+					$abslines = $abslines . $_ . "\n";
+				}
+				next;
+			}
+
+			# handle multi-line errors differently
+			if (/^\terror = {$/) {
+				$errorlines = '';
+				while ($_ = shift(@record)) {
+					last if (/^},/);
+					$errorlines = $errorlines . $_ . "\n";
+				}
+				next;
+			}
+
+			s/^\s*//;	# beginning white space
+			s/\s*$//;	# ending white space
+			s/,$//;		# ending ,
+			next if /^[{}]$/;
+#			($key, $val) = split(/\s*=\s*/);
+			($key, $val) = /\s*(\w+)\s*=\s*(.+)/;
+			die "problem val `$_'" unless defined($val);
+			die "problem key `$_'" unless defined($key);
+		#	$val =~ s/^{//;
+		#	$val =~ s/}$//;
+			$key =~ s/[{}]//;
+		#	print "`$key'	`$val'\n";
+			$bib{$key} = $val;
+		}
+#		@tmp = keys(%bib);
+#		print "tmp=`@tmp'\n";
+
+		#	remove some surrounding {}
+		$bib{'title'} =~ s/^{//;
+		$bib{'title'} =~ s/}$//;
+		if ($bib{'pages'}) {
+			$bib{'pages'} =~ s/^{//;
+			$bib{'pages'} =~ s/}$//;
+			$bib{'pages'} =~ s/--/-/;
+		}
+		#
+		#	"author" is actually editor for proceedings
+		#
+		if ($type eq 'proceedings') {
+			die "EDITOR?"	if ($bib{'editor'} eq '');
+			$author = $bib{'editor'};
+			delete $bib{'editor'};
+		} else {
+			die "AUTHOR?"	if (!defined($bib{'author'}));
+			$author = $bib{'author'};
+			delete $bib{'author'};
+		}
+		$author =~ s/^{//;
+		$author =~ s/}$//;
+		$author =~ s/ and/ /g;
+	#	$author =~ s/([A-Z])\. /$1 /g;	# kill author punctuation
+
+		undef($Note);
+		if ($bib{'note'}) {
+			$bib{'note'} =~ s/^{//;
+			$bib{'note'} =~ s/}$//;
+			$Note = $bib{'note'};
+		}
+
+		undef($Annote);
+		if ($bib{'annote'}) {
+			$bib{'annote'} =~ s/^{//;
+			$bib{'annote'} =~ s/}$//;
+			$Annote = $bib{'annote'};
+		}
+
+		undef($Abs);
+		if ($bib{'abs'}) {
+			$bib{'abs'} =~ s/^{//;
+			$bib{'abs'} =~ s/}$//;
+			$Abs = $bib{'abs'};
+		}
+
+		undef($Error);
+		if ($bib{'error'}) {
+			$bib{'error'} =~ s/^{//;
+			$bib{'error'} =~ s/}$//;
+			$Error = $bib{'error'};
+		}
+
+		undef($line1);
+
+		if ($type eq 'article')		{ @Keys = @Article;	}
+		elsif ($type eq 'book')		{ @Keys = @Book;	}
+		elsif ($type eq 'conference')	{ @Keys = @Conference;	}
+		elsif ($type eq 'phdthesis')	{ @Keys = @Phdthesis;	}
+		elsif ($type eq 'incollection')	{ @Keys = @Incollection; }
+		elsif ($type eq 'misc')		{ @Keys = @Misc;	}
+		elsif ($type eq 'proceedings')	{ @Keys = @Proceedings;	}
+		elsif ($type eq 'techreport')	{ @Keys = @Techreport;	}
+		else {
+			print "NOT IMPLEMENTED ($type)\n";
+			undef(%bib);
+	#		die "Not implemented `$type'"
+		}
+
+		#
+		#	Next file if checking only
+		#
+		if ($check_keys_only) {
+			close(Bfile);
+			next;
+		}
+
+		#
+		#	Print standard stuff
+		#
+		$line1 = "\@" . $EntryType{$type} . $Line1spacer . $code;
+		foreach $key (@Keys) {
+			if (defined($bib{$key})) {
+				if ($bib{$key} ne '') {
+					$line1 .= $Line1spacer . $bib{$key};
+				} else {
+					$line1 .= $Line1spacer . "?";
+				}
+			}
+			else {
+				$line1 .= $Line1spacer . "?";
+			}
+		}
+		$line1 .= $Line1spacer . $bib{'year'};
+
+		print "$line1\n";
+		print "$author\n";
+		die "TITLE?"	if ($bib{'title'} eq '');
+		print "$bib{'title'}\n";
+
+		#
+		#	Delete used keys to see if any left 
+		#
+		foreach $key (@Keys, @any) {
+			delete $bib{$key};
+		}
+		#
+		#	Extra entries
+		#
+		@extra = sort keys %bib;
+		if (@extra) {
+			if ($check_keys_only) {
+				print "$file $type $code extra_keys=`@extra'\n";
+			}
+			if (1) {
+				foreach $key (@extra) {
+					$bib{$key} =~ s/^{//;
+					$bib{$key} =~ s/}$//;
+					print "\@$key\t$bib{$key}\n";
+				}
+			}
+		}
+
+		#
+		#	Notes
+		#
+		print "\@error\t$Error\n"	if $Error;
+		print "\@note\t$Note\n"		if $Note;
+		print "\@an\t$Annote\n"		if $Annote;
+		print "\@abs\t$Abs\n"		if $Abs;
+		print "\@abs\n$abslines"	if ($abslines);
+		print "\@error\n$errorlines"	if ($errorlines);
+
+		print $nl_tail;
+	}
+	close(Bfile);
+}

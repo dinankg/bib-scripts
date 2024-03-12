@@ -1,0 +1,12 @@
+#!/bin/csh
+#	do-get
+#	make sure requested papers aren't already bibbed
+
+set keys = `grep bibitem newbib.bbl | sed -e 's/\\bibitem{//' -e 's/\}//'`
+
+#echo $keys
+
+foreach key ($keys)
+	echo -n "$key	"
+	grep $key b1/*.b1
+end

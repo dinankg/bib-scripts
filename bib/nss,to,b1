@@ -1,0 +1,115 @@
+#!/bin/perl -w
+#	nss,to,b1
+#	convert from NSS/MIC CDROM to .b1 file
+#
+
+$page = $ARGV[0];
+die "page" unless defined($page);
+
+#	leave these words capitalized
+@caps = ('American', 'BaF', 'Bayesian', 'Carlo', 'Compton', 'Johann', 'Krylov', 'Markov', 'Monte', 'NaI', 'Radon', 'Tc-99', 'Tesla', 'Tl-201', 'X-ray');
+#	Exact, it-W
+
+#
+#	convert a word to lower case
+#
+sub tolower {
+	local($tmp) = $_[0];
+	$tmp =~ tr/A-Z/a-z/;
+	return $tmp;
+}
+
+#
+#	convert most of title to lower case
+#
+sub TitleLower {
+	#	protect special words with ZZZ at front
+	local($title) = $_[0];
+	for (@caps) {
+		$title =~ s/($_)/ZZZ$1/g if ($title =~ /$_/);
+	}
+
+	(local($title1), $title) = $title =~ /\s*(\w+)(.*)/;
+	$title =~ s/([- ][A-Z][a-z])/&tolower($1)/ge;
+
+	$title = $title1 . $title;
+	$title =~ s/ZZZ//g;	# clear out caps-protecting ZZZ
+	return $title;
+}
+
+
+#
+#	loop over input lines
+#
+while (<STDIN>) {
+	next if (!/^\//);
+
+	if (/^\/Title \(M/) {
+		chop;	# linefeed
+		chop;	# CR
+		($num, $title) = /^\/Title\s+\((\S+)\s+(.*)/;
+		die "num in :$title:" unless defined($num); 
+
+		while (/\\$/) {
+			chop $title;	# \
+			$_ = <STDIN>;
+			chop;		# linefeed
+			chop;		# CR
+			$title .= $_;
+		}
+		chop $title;	# )
+
+		$title =~ s/\\\(/(/g;
+		$title =~ s/\\\)/)/g;
+		$title =~ s/\\260/\$^{\\circ}\$/g;	# degrees symbol
+#		print "num=$num title='$title'\n";
+
+		($w1, $w2, $w3) = split(/[ -\/]/, $title);
+		$w1 =~ s/(.).*/$1/;
+		$w2 =~ s/(.).*/$1/;
+		$w3 =~ s/(.).*/$1/;
+		$code = $w1 . $w2 . $w3;
+		$code =~ tr/A-Z/a-z/;
+	}
+	elsif (/^\/Title/) {
+		print STDERR "extra title ,$_";
+	}
+
+	if (defined($title) && /^\/Author/) {
+		chop;	# linefeed
+		chop;	# CR
+		$author = $_;
+		while (/\\$/) {
+			$_ = <STDIN>;
+			chop;		# linefeed
+			chop;		# CR
+			chop $author;	# \
+			$author .= $_;
+		}
+		chop $author;	# )
+		$author =~ s/^\/Author\s+\(//;
+		$author =~ s/ and /  /;
+		$author =~ s/, /  /g;
+		$author =~ s/\. / /g;
+
+		$author =~ s/\\344/\\"a/g;	# \"a
+		$author =~ s/\\350/\\`e/g;	# \`e
+		$author =~ s/\\351/\\'e/g;	# \'e
+		$author =~ s/\\361/\\~n/g;	# \~n
+		$author =~ s/\\366/\\"o/g;	# \"o
+		$author =~ s/\\374/\\"u/g;	# \"u
+
+		($first) = split(/  /, $author);
+		$first =~ s/.* //g;
+		$first =~ s/\\.//g;
+		$first =~ tr/A-Z/a-z/;
+		die "$author" unless defined($title);
+
+		$title = &TitleLower($title);
+#		print "$title\n";
+		print "\@c  $first:97:$code  nss  ?  $page  1997\n$author\n$title\n\@info\t$num\n\n";
+		exit 0;
+	}
+
+#	print $_;
+}

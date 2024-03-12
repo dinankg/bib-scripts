@@ -1,0 +1,15 @@
+#!/bin/csh -e
+# idd
+# ieee doi
+# for inline use within vim
+
+set tmp = /tmp/idd
+cat >! $tmp
+
+cat $tmp
+
+set key = `cat $tmp | awk '{print $2}'`
+
+source ~/l/tex/script/alias
+
+gra $key | grep doi

@@ -1,0 +1,28 @@
+#!/bin/csh -e
+# xplore1,isnum
+# parse issue numbers from ieee xplore 2.0 html
+
+# merge to one big line
+	perl -pe 's/[\r\n]+/ /g' \
+	# split on options \
+	| perl -pe 's/\<option/\n option/g' \
+	| perl -pe 's/\<\/option\>/ option\n/g' \
+	| perl -pe 's/ selected\>/\>/' \
+	| perl -pe 's/[\t ]+/ /g' \
+	| grep Volume \
+	| perl -pe 's/ option value=\"//' \
+# Volume BME-21 , Issue 6 \
+	| perl -pe 's/\"\>\s?Volume\s?([A-Z]*\-)?\d+\s?,\s?Issue\s?/ /' \
+	| perl -pe 's/\s?option//' \
+	| perl -pe 's/ , Part /-/'
+
+if 0 then
+	# old way
+	cat $tmp_top \
+	# "tocresult" is key for isNumbers \
+	| perl -ne 'print if m:/xpl/tocresult.jsp\?isNumber=:' \
+	# strip href junk \
+	| sed -e 's/.*<a href="//' -e 's/">//' \
+	| de-html \
+	> $tmp_issue
+endif

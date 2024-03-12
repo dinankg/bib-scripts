@@ -1,0 +1,78 @@
+#!/usr/bin/perl -w
+# wiley2 vol num mon year journal
+# convert Wiley (MRM etc.) table of contents to my .b format
+
+($vol, $num, $mon, $year, $jour) = (@ARGV);
+die "args" unless defined($jour);
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/tolower.pl';
+require $home . '/l/src/script/bib/author.pl';
+require $home . '/l/src/script/bib/bibkey.pl';
+require $home . '/l/src/script/bib/htmlaccent.pl';
+
+$/ = "\n\n"; # slurp paragraph at time
+
+$erratum = 0;
+
+while (<STDIN>)
+{
+#	print "`$_'\n";
+
+	next if /Books received/;
+	$erratum = 1 if (/Erratum/ || /Corrigendum/);
+
+	next unless /DOI:/;	# each article has a DOI!
+
+	$_ = &htmlaccent($_);	# convert html accents
+	s/DOI:/\@u doi/;
+	s/<[^>]*>//g;		# html junk
+	s/Published Online:.*\n//g;
+
+	s/^\n*//;	# blank lines at start
+	s/\n\n*/\n/g;	# blank lines
+
+	($pages) = / \(p ([\d-]*)\)/;	# extract pages
+
+	if (!defined($pages)) {
+#		print STDERR "skipping this due to no pages\n`$_'\n";
+		print STDERR "warning: no pages\n`$_'\n";
+#		next;
+		$pages = '?';
+	} else {
+		s/ \(p ([\d-]*)\)//g;	# strip pages
+	}
+
+	$cite = "\@a xxxxxx $jour $vol $num $pages $mon $year";
+
+	@all = split(/\n/);
+	$nline = $#all + 1;
+
+	if ($nline == 3) {
+		$auth = "$all[1]";
+		$title = "$all[0]";
+		$url = "$all[2]";
+	}
+	else {
+		print STDERR "skipping bad entry (erratum=$erratum)\n`$_'\n";
+		next;
+	}
+
+	$auth = &author($auth);
+
+	$fakeb2 = "$cite\n$auth\n$title\n";
+	@bibkey = &bibkey($fakeb2); 
+	($author, $yr, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$yr:$code";
+
+	$cite =~ s/xxxxxx/$key/;
+
+	if ($erratum) {
+		$annote = "\@an erratum";
+	} else {
+		$annote = "";
+	}
+
+	print "$cite\n$auth\n$title\n$url\n$annote\n";
+}

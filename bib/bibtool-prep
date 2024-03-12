@@ -1,0 +1,15 @@
+#!/bin/csh -e
+# bibtool-prep
+
+cat z.aux \
+	| perl -ne '{print unless /newlabel/}' \
+	| perl -ne '{print unless /nobreakspace/}' \
+	| perl -ne '{print unless /bibcite/}' \
+	| perl -ne '{print unless /contentsline/}' \
+	>! tmp.aux
+
+echo 'bibtool -x tmp.aux -o tmp.bib'
+bibtool -x tmp.aux -o tmp.bib
+
+#	| perl -ne '{print unless /citation/}'
+

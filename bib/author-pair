@@ -1,0 +1,13 @@
+#!/usr/bin/perl -w
+# author-pair
+# part of author-test
+# check that each pair of lines is same
+
+$/ = ""; # slurp paragraph at time
+
+# for each paragraph
+while (<>)
+{
+	@line = split(/\n/);
+	print "bad `$line[0]' vs `$line[1]'\n" if ($line[0] ne $line[1]);
+}

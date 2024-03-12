@@ -1,0 +1,13 @@
+#!/bin/csh
+# siam-bib-prep1
+# prep siam .bib file for conversion
+perl -pe 's/(URL|eprint) = \{\s*$/\1 = \{/' \
+	| perl -pe 's/^URL.*$//' \
+	| perl -pe 's/^\}\,\s*\n$//' \
+	# scraper leaves month={Jan},} at end \
+	| perl -pe 's/,\}$/,\n\}/' \
+	# month is meaningless for siam \
+	| perl -pe 's/month=\{Jan\},//' \
+	# deblank \
+	| perl -ne 'print unless /^\s*$/' \
+	| perl -pe 's/\@article/\n\@article/'

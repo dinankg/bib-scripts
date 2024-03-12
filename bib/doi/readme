@@ -1,0 +1,19 @@
+
+http://www.crossref.org/guestquery/
+
+for doi into bibtex:
+http://www.crossref.org/CrossTech/2011/11/turning_dois_into_formatted_ci.html
+
+curl -LH "Accept: text/bibliography; style=bibtex" http://doi.org/10.1038/nrd842
+
+in ruby:
+open("http://doi.org/10.1038/nrd842","Accept" => "text/bibliography; style=bibtex"){|f| f.each {|line| print line}}
+
+
+http://tex.stackexchange.com/questions/6848/automatically-dereference-doi-to-bib
+
+
+http://tex.stackexchange.com/questions/6810/automatically-adding-doi-fields-to-a-hand-made-bibliography
+
+bibtool -x z.aux -r bib-format.txt # -o temp.bib
+

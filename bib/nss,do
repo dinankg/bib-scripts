@@ -1,0 +1,34 @@
+#!/bin/csh
+#	nss,do
+#	make .b1 file from nss cdrom
+
+set root = /cdrom/data
+
+#
+#	extract page numbers from toc file
+#	toc file created by hand cut and paste from nssmic97.pdf, page 57-
+#
+if 0 then
+	cat nssmic97,toc | perl -ne 's/(\**M\d+-\d+ )/\n$1/g; print' \
+	| perl -ne 'print if /^M\d+-\d+/' \
+	| perl -pe 's/HR+ 1/HR+1/' \
+	| perl -ne 'print if s/(M\d+-\d+ ).* (\d+) .*/$1 $2/' \
+	| sort -u > nssmic97,pages
+exit
+endif
+
+#
+#	
+#
+if 1 then
+	foreach file ($root/m*.pdf)
+#	foreach file ($root/m06_15.pdf)
+		set key = M`echo $file | sed -e s,$root/,, -e 's/m0*//' -e s/_/-/ -e s/.pdf//`
+		set page = `grep $key nssmic97,pages | awk '{print $2}'`
+#		echo $file $key $page
+		cat $file | nss,to,b1 $page
+		sleep 1
+#		echo $status
+#		exit
+	end
+endif

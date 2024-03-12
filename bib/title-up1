@@ -1,0 +1,12 @@
+#!/usr/bin/perl -w
+# title-up1
+# upper-case (capitalize) 1st letter of title
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/toupper.pl';
+
+# for each line...
+while (<>)  {
+	$_ =~ s/^([a-z])/&toupper($1)/e;
+	print "$_";
+}

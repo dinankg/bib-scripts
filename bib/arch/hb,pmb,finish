@@ -1,0 +1,85 @@
+#!/usr/bin/perl -w
+#	hb,pmb,finish
+#	following hb,pmb,step1 preprocessing,
+#	finish converting from temporary PMB format to my .b2 format
+#	filename: issue/year/volume,number,month e.g. 1997/42,1,jan
+#	paragraphs:
+#		page
+#		title
+#		AUTHOR authors
+
+$home = $ENV{HOME};
+require $home . '/l/src/script/bib/tolower.pl';
+require $home . '/l/src/script/bib/author.pl';
+require $home . '/l/src/script/bib/bibkey.pl';
+
+#
+#	slurp paragraph at time
+#
+$/ = "\n\n";
+
+#
+#	filename has journal citation info
+#
+$file = $ARGV[0];
+die "args" unless defined($file);
+
+($year, $vol, $num, $month) = $file =~ /issue\/(\d+)\/(\d+),(\d+),(\w+)/;
+die "arg" unless defined($month);
+$cite0 = "pmb $vol $num pppppp $month $year";
+
+open(File, $file) || die "cannot open '$file'\n";
+
+$first = 1;
+
+while (<File>) {
+#	print "`$_'\n";
+
+	print STDERR "skipping bad paragraph `$_'\n" unless /AUTHOR/;
+
+	@all = split(/\n/);
+	if (!defined($all[2])) {
+		print STDERR "skipping bad paragraph `$_'\n";
+		next;
+	}
+
+	$page1 = $all[0];
+	$title = &TitleLower($all[1]);
+	$all[2] =~ s/AUTHOR //;
+	$auth = &author($all[2]);
+
+	$fakeb2 = "\@a xx:xx:xx $cite0\n$auth\n$title\n";
+	@bibkey = &bibkey($fakeb2); 
+	($author, $year, $code) = @bibkey;
+	die "code" unless defined($code);
+	$key = "$author:$year:$code";
+
+	$cite = $cite0;
+
+	$printnext = "\@a $key $cite\n$auth\n$title\n";
+
+	if (!$first) {
+		# page numbers may contain leading letters, like N1-N20
+		($page2l) = $page1save =~ /([A-Z]*)/;
+		($page1l, $page1n) = $page1 =~ /([A-z]*)(\d+)/;
+
+		if ($page2l eq $page1l) {	# same type
+			$page2 = $page1n - 1;
+			$pages = "$page1save-$page2";
+		}
+		else {
+			$pages = "$page1save-";
+		}
+		$printsave =~ s/pppppp/$pages/;
+		print "$printsave\n";
+	}
+
+	$first = 0;
+	$printsave = $printnext;
+	$page1save = $page1;
+}
+
+# print last one
+$pages = "$page1save-";		# unknown last page, of course
+$printsave =~ s/pppppp/$pages/;
+print "$printsave";

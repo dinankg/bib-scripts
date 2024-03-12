@@ -1,0 +1,41 @@
+#!/usr/um/bin/perl
+#	smash_AZ
+#	combine A B Coauther to be AB Coauthor,
+#	and substitute Oct. for October.
+
+@Months = ('January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Trans.', 'volume', 'pages');
+
+%abbrev =	(
+		'January',	'Jan.',
+		'February',	'Feb.',
+		'March',	'Mar.',
+		'April',	'Apr.',
+		'May',	'May',
+		'June',	'June',
+		'July',	'July',
+		'August',	'Aug.',
+		'September',	'Sep.',
+		'October',	'Oct.',
+		'November',	'Nov.',
+		'December',	'Dec.',
+		'volume',	'vol.',
+		'pages',	'pp.',
+		'Trans.',	'Tr.');
+
+#
+#	do files on command line
+#
+	foreach $file (@ARGV) {
+#		print "$file:\n";
+		open(TEX, $file);
+		while (<TEX>) {
+			chop;
+			s/([A-Z])[ ~]([A-Z]) /\1\2 /g;
+			$line = $_;
+			for (@Months) {
+				$m = $abbrev{$_};
+				$line =~ s/$_/$m/;
+			}
+			print "$line\n";
+		}
+	}

@@ -1,0 +1,17 @@
+#!/bin/csh -e
+# ris,b
+
+set com = `echo $0`
+set dir = `dirname "$com"`
+# echo $dir
+
+if ($#argv != 1) then
+	echo "usage $0 file(s)"
+exit -1
+endif
+
+jl $dir/ris,b.jl $*
+
+echo ""
+
+rm -i $*

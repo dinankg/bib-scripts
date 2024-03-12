@@ -1,0 +1,186 @@
+#!/bin/csh -e
+# wiley1
+# get issues from Wiley interscience (MRM, JMRI, HBM, ...)
+
+set jour = `pwd`
+set jour = `dirname $jour`
+set jour = `pwd | sed -e 's:'"$jour"'/::'`
+
+# this lynx config file allows cookies from wiley with "wrong" domain
+set lynx = 'lynx -cfg ~/l/src/script/rc/lynxrc'
+# -accept_all_cookies -cookies -cookie_file=FILENAME
+
+if ($#argv > 0) then
+	set year = $1
+else
+	set year = `date +%Y`
+endif
+
+if ($jour == mrm) then
+	if ($year <= 1998) then
+		set url = "112142626/$year"
+	else
+		set url = "10005196/issueyear?year=$year"
+	endif
+else if ($jour == jmri) then
+	if ($year <= 1998) then
+		set url = "112142611/$year"
+	else
+		set url = "10005199/issueyear?year=$year"
+	endif
+else
+	echo "unknown journal $jour"
+	exit -1
+endif
+#set url = "http://www3.interscience.wiley.com/cgi-bin/jtoc/$url/"
+set url = "http://www3.interscience.wiley.com/journal/$url"
+
+#
+# get list of all the issues
+# (if needed, which it usually is because usually it is cleared first)
+#
+set issues = ./issues/$year
+
+if !(-e $issues) then
+	set tmp1 = /tmp/t,wiley.htm
+	set tmp2 = /tmp/t,wiley,iss.htm
+
+#	echo "$url"
+	if 1 then
+		$lynx -source "$url" > $tmp1
+		wc $tmp1
+	endif
+
+	set bug = `cat $tmp1 | perl -ne 'print 1 if /unable to send a cookie/'`
+	if ($bug) then
+		echo "$url"
+		echo 'wiley cookie problem: use view source and copy all'
+		open $url
+		vi $tmp1
+		echo -n "after editing, hit return: "
+		set dummy = $<
+	endif
+
+	cat $tmp1 \
+		# merge into one long line \
+		| perl -pe 's/\n/ /g' \
+		# multiple spaces into one \
+		| perl -pe 's/\s+/ /g' \
+#old		# split at: jissue/112149360">Volume 3 Issue 6 ... \
+#old		| perl -pe 's/jissue\//\n/g' \
+		# split at: /journal/116835742/issue">Volume 3 Issue 6 ... \
+		| perl -pe 's:\/journal\/(\d*)\/issue\"\>:\n\1 :g' \
+		| grep Volume \
+		# remove junk after year \
+		| perl -pe "s/ $year.*/ $year/" \
+		| de-html \
+		| perl -pe 's/ -  //' \
+#		| perl -pe 's/\r/ /g' \
+#		| perl -pe 's/\).*/\)/' \
+#		| perl -pe 's/\<\/a\>\s* -//' \
+#		| perl -pe 's/\">/ /' \
+		# 112149310 Volume 2 Issue 1 February 1985 (1 - 90) \
+		| perl -pe 's/(\d*) Volume (\d*) Issue ([S]?\d*) /\1 \2 \3 /' \
+		| month,lower,3 \
+		# remove pages \
+#		| perl -pe 's/ \(.*\)$//' \
+		> $tmp2
+
+	wc $tmp2
+	cp -p $tmp2 $issues
+
+	if ($bug) then
+		echo -n 'continue? '
+		set dummy = $<
+		exit
+	endif
+
+	/bin/rm $tmp1 $tmp2
+else
+	echo "file $issues already exisits for year $year, so using it"
+endif
+
+
+#
+# convert each issue
+#
+
+set issues = /tmp/t,wiley,issues
+cat issues/$year | sort -r -n >! $issues
+
+set nissue = `cat $issues | wc -l`
+echo "converting $nissue issues for year $year"
+if ($nissue == 0) then
+	echo 'error: no issues?'
+	rm $issues
+	exit -1
+endif
+
+set is = 0
+while ($is < $nissue)
+	@ is += 1
+	set info = (`cat $issues | head -n $is | tail -1`)
+	echo $is "$info"
+
+	set id = $info[1]
+	set vol = $info[2]
+	set num = $info[3]
+	set mon = $info[4]
+	set year = $info[5]
+	set yr = `echo $year | sed 's/..//'`
+
+	set out = $yr/$vol,$num
+	if !(-d $yr)	mkdir $yr
+
+	if (-e $out) then
+		echo $out exists
+		continue
+	endif
+
+#	set url = 'http://www3.interscience.wiley.com/cgi-bin/issuetoc?ID='$id
+	set url = 'http://www3.interscience.wiley.com/journal/'$id'/issue'
+
+	# download issue and convert
+	set html = /tmp/t,wiley,html
+	if 1 then
+		echo "url = $url"
+		$lynx -source "$url" > $html
+
+		set bug = `cat $html | perl -ne 'print 1 if /unable to send a cookie/'`
+		if ($bug) then
+			echo 'wiley cookie problem'
+#			open $html
+#			open $url
+#			vi $tmp1
+#			echo -n "after editing, hit return: "
+#			set dummy = $<
+			exit
+		endif
+	endif
+
+	if 1 then
+		cat $html \
+		# merge into one long line \
+		| perl -pe 's/\n/ /g' \
+		# multiple spaces into one \
+		| perl -pe 's/\s+/ /g' \
+		# split at <strong> \
+		| perl -pe 's/\<strong\>/\n\n/g' \
+		# DOI if article \
+		| perl -ne 'print if /DOI:/' \
+		| perl -pe 's/DOI: ([^\<]*)\<.*/\n\@u doi \1\n/' \
+		# page numbers \
+		| perl -pe 's/\(p ([\d\-]*)\)/\n\1\n/' \
+		| perl -pe 's/Published Online:.*//' \
+		| de-html \
+		# extra spaces at end \
+		| perl -pe 's/ +$//' \
+		# finally, .b format \
+		| wiley2 $vol $num $mon $year $jour \
+		> $out
+
+		/bin/rm $html
+		sleep 2
+	endif
+end
+/bin/rm $issues

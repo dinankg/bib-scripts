@@ -1,0 +1,90 @@
+#!/bin/csh -e
+#	xplore,year
+#	convert an ieee-xplore list of issues (from one year/volume)
+#	into a set of urls to download, then use lynx to grab each issue
+#	should be run while sitting in the directory of interest.
+
+if ($#argv < 1) then
+	echo "usage: $0 file.htm [destination_dir]"
+	exit -1
+endif
+set file = $1
+if ($#argv >= 2) then
+	set dir = "$2"
+else
+#	set dir = "."
+	set dir = `basename $file .h`	# 2000.h to 2000
+	if !(-e $dir) mkdir $dir
+endif
+
+set base = 'http://ieeexplore.ieee.org'
+set tmp1 = /tmp/tmp1,yr.xxx
+set tmp2 = /tmp/tmp2,yr.xxx
+
+#
+#	parse html file to fine issues for this year, e.g. "2000.h"
+#
+cat $file | grep -e Issue \
+	| grep -e 'tocresult.jsp?isNumber=' \
+#	clean junk that precedes the url itself \
+	| sed -e 's/.*<a href="//' \
+#	clean junk that trails the url \
+	| sed -e 's/">.*//' \
+# reverse bottom to top (so issue 1 is first) \
+	| tac \
+	>! $tmp1
+
+#
+#	get the partial urls from file and echo to user
+#
+set urls = (`cat $tmp1`)
+echo getting "$#urls" issues:
+#echo "$urls" | sed -e "s/ /\n/g"
+
+#
+#	loop through url's and use lynx
+#
+set issue = 0
+while ($issue < $#urls)
+	@ issue += 1
+
+	if (-e $dir/$issue) then
+		echo "$issue already exists"
+		continue
+	endif
+
+	#
+	#	loop over pages until no more
+	#
+	set page = 0
+	while (1)
+		# initial url for this page of TOC
+		set url = $base"$urls[$issue]"'&page='$page
+		echo "issue=$issue page=$page url=$url"
+
+		lynx -accept_all_cookies -source "$url" >! $tmp2
+
+		# see if last page
+		set done = `cat $tmp2 | perl -ne 'print "1" if /No data available in database/'`
+		if ("$done" == 1) then
+			echo "done"; echo ""
+			break
+		endif
+
+		echo "converting to $dir/$issue url=$url"
+#		cat $tmp2 | xplore,to,b2; exit		# for testing
+		cat $tmp2 | xplore,to,b2 >> $dir/$issue
+
+		@ page += 1
+	end
+
+	sleep 3
+end
+
+echo "done with $#urls urls"
+
+# new typical url:
+# http://ieeexplore.ieee.org/xpl/tocresult.jsp?isNumber=21603&page=0
+
+# old typical partial url:
+#/search97/s97is.vts?Action=Search&SearchPage=EarlierIssues.jsp&ResultTemplate=Toc_result.hts&Filter=fld_sch.hts&ViewTemplate=lpdocview.hts&collection=jour&SortField=hpag&SortOrder=asc&ResultCount=15&queryText=(isnumber<contains>4478)"

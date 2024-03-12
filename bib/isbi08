@@ -1,0 +1,6 @@
+#!/bin/csh -e
+# isbi08
+# search isbi08 on xplore
+
+open 'http://ieeexplore.ieee.org/search/searchresult.jsp?queryText=%28'$1'+%3Cin%3E+metadata%29+%3Cand%3E+%284534844+%3Cin%3E+punumber%29'
+#&coll2=ieeecnfs&coll3=ieecnfs&history=yes&reqloc=others&scope=metadata&imageField2.x=0&imageField2.y=0'

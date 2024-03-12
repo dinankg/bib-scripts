@@ -1,0 +1,11 @@
+#/bin/csh -e
+# use within vi for @u ieee ...
+
+# jstor cleanup
+if 0 then
+	cat | perl -pe 's/.*=/\@u jstor /'
+exit
+endif
+
+cat >! /tmp/t,di
+source /tmp/t,di

@@ -1,0 +1,49 @@
+#!/bin/csh -e
+# scrape1
+# call web scraper for SIAM and IEEE etc.
+
+if ("$1" == "-1") then
+	set theissue = ""
+	set issue_name = 0
+	set issue = 0
+else
+	set issue_name = $1
+	set issue = `echo $issue_name | perl -pe 's/^0//'`
+	set theissue = "-i $issue"
+endif
+
+set dir = `pwd`
+echo $dir
+set tmp1 = `echo $dir | sed -e 's:/: :g'`
+set tmp2 = ($tmp1)
+set narg = "$#tmp2"
+set narg1 = `echo $narg - 1 | bc`
+set narg2 = `echo $narg - 2 | bc`
+set y2 = "$tmp2[$narg]"
+
+set pub = "$tmp2[$narg2]"
+set jour = "$tmp2[$narg1]"
+
+#set jour = siam-"$jour"
+set jour = "$pub"-"$jour"
+
+# MIA and JOTA are by month, so "scrape1 4" for apr
+if ($jour == other-mia || $jour == other-jota) then
+	set theissue = "-m $issue"
+endif
+
+if ($jour == iop-pmb || $jour == iop-invpro) then
+	set y4 = $y2
+else
+	if ($y2 < 40) then
+		set y4 = 20$y2
+	else
+		set y4 = 19$y2
+	endif
+endif
+echo "y4=$y4 theissue=$theissue jour=$jour"
+
+# new way:
+set bib = $issue_name.bib
+echo "scraper $jour -y $y4 $theissue -f $bib"
+~/l/dat/code/others/citation-scraper/scraper $jour -y $y4 $theissue -f $bib

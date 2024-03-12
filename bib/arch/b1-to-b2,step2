@@ -1,0 +1,31 @@
+#!/bin/csh -e
+#	do,b2
+
+	set arg = "-nobrace -an -abbrev -abs -comment -error"
+
+#	create .bib file from .b1 files
+set m1 = master1.bib
+if !(-e $m1) then
+	b2,bib $arg ../b1/*.b1 > $m1
+endif
+
+#
+#	.b2 files from .b1 files via .bib files
+#
+if !(-e xray.b2) then
+	foreach b1 (../b1/*.b1)
+		set root = `basename $b1 .b1`
+		set bib = tmp.bib
+		set b2 = $root.b2
+		b2,bib $arg $b1 > $bib
+		bib,b2 $bib > $b2
+		rm $bib
+	end
+endif
+
+#	create .bib file from .b2 files
+set m2 = master2.bib
+if !(-e $m2) then
+	b2,bib $arg *.b2 > $m2
+	diff $m1 $m2
+endif
