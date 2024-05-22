@@ -59,3 +59,18 @@ Then running `b,bib example.b2` at shell prompt produces the output
 
 Disclaimer:
 There are probably missing files and inconvenient "hard-wired" shell paths.
+
+
+The examples above illustrate my personal BiBTeX key style
+(that I probably learned from someone at Stanford):
+last name of first author,
+then the year (2 digits if after 1950, four digits if before),
+then the first letter of the first three words in the title.
+So "Optimization methods for ..." in 2020 becomes `:20:omf`.
+If I were starting over today I would use 4 digits
+and I might consider `2020:fessler:omf`
+because as papers go from preprints to publications
+the year usually changes
+whereas the author and title change less often.
+So I could grep for `fessler:omf` and find it
+even if the year has changed.
