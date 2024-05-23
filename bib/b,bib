@@ -12,8 +12,10 @@
 
 die "no home" unless defined($ENV{HOME});
 $home = $ENV{HOME};
-require $home . '/l/src/script/bib/at_u.pl';
 $dirbib = "$home/l/tex/biblio/bib";
+use Cwd qw();
+my $path = Cwd::cwd(); # current directory
+require "$path/at_u.pl";
 
 $Usage = "b,bib [optional arguments]:
 	-b		-abs -annote -comment -errata -html -url -abbrev
@@ -114,7 +116,7 @@ if (!$keepabbrev)
 
 # read name accent pairs into associative array
 #
-if (1)
+if (0)
 {
 	$file = "$dirbib/jf-names.txt";
 	open(Afile, $file) || die "Cannot open '$file'\n";
@@ -689,7 +691,7 @@ foreach $file (@ARGV)
 			if ($key eq "doi")
 				{$doi = $rest; next;}
 			if ($key eq "url")
-				{$url = &u2url($rest); next;}
+			{$url = &u2url($rest); next;}
 
 			#
 			# possible multi-line cases:
